@@ -4,9 +4,9 @@ Full-stack app that turns a job description + company URL + days-until-interview
 structured interview prep kit (company brief, role breakdown, question bank, flashcards,
 day-by-day schedule).
 
-**Status:** Phases 1-5 (scaffold/data model, retrieval, generation, coverage+schedule, backend
-orchestration) complete. See commit history for progress. Full architecture/setup docs will be
-filled in during Phase 8.
+**Status:** Phases 1-6 (scaffold/data model, retrieval, generation, coverage+schedule, backend
+orchestration, CLI batch tool) complete. See commit history for progress. Full architecture/setup
+docs will be filled in during Phase 8.
 
 ## Design notes
 
@@ -32,14 +32,28 @@ gap-fill pass scoped to just those requirements, then stops regardless of outcom
 ### Gemini call volume per kit and rate limiting
 Worst case per kit: 1 (requirement extraction) + 1 (company brief) + 4 (one per question category)
 + up to 4 more (second coverage pass, scoped per category with a gap) + 1 (flashcards) = up to 11
-Gemini calls. As of Phase 5, `backend/src/orchestration/gemini-config.ts` wraps `fetch` itself with
-a single process-wide `createConcurrencyLimiter` (reused from `retrieval/rate-limit.ts`, not a
-second implementation) so every pipeline call sharing that config — a kit's 4-category fan-out,
-and every concurrently-running kit's job — is throttled together rather than each burst stacking
+Gemini calls. `pipeline/src/generation/gemini-rate-limit.ts`'s `createLimitedFetch` wraps `fetch`
+itself with a `createConcurrencyLimiter` (reused from `retrieval/rate-limit.ts`, not a second
+implementation), so every pipeline call sharing that fetchImpl — a kit's 4-category fan-out, and
+every concurrently-running kit/case — is throttled together rather than each burst stacking
 independently. `gemini-client.ts`'s own backoff still only reacts *after* a 429; the limiter is
-what prevents the burst in the first place. Phase 6's CLI will need its own instance of the same
-pattern for cross-case concurrency within its own process (a separate Node process, so it can't
-share the backend's in-memory limiter — see the note in that phase once written).
+what prevents the burst in the first place. The backend (`gemini-config.ts`) and the CLI
+(`cli/src/index.ts`) each create their own instance of this helper for their own process — a
+limiter can't be shared across process boundaries, and doesn't need to be, since each process is
+managing its own share of the free-tier budget.
+
+### CLI batch concurrency and the 15-minute/5-case target
+`cli/src/index.ts` bounds two independent things: how many *cases* run concurrently
+(`createConcurrencyLimiter`, default 3 — plain practicality, so 5 cases don't all crawl/generate
+at once and blow past memory/network limits) and how many *Gemini requests* are in flight at once
+process-wide (`createLimitedFetch`, default 2 — the free-tier-respecting cap from the section
+above). Because the Gemini limiter is shared across every case, raising case concurrency doesn't
+multiply Gemini load — it only lets more crawling/non-LLM work overlap while LLM calls queue
+behind the same cap. A real end-to-end run against a local fixture server (see
+`cli/src/__tests__/evaluate.test.ts` and the manual smoke test run during Phase 6) completed a
+single case in ~1s with no Gemini key configured (heuristic fallback path); with a real key,
+Gemini flash latency (~2-5s/call) times ~11 worst-case calls at concurrency 2 puts a single kit at
+roughly 30-60s, comfortably inside 15 minutes for 5 cases even with some retries.
 
 ### Job crash/restart recovery
 A kit's `job.status` is a state machine (`pending -> researching -> generating -> checking ->
@@ -68,11 +82,24 @@ kit, and duplicating the pass-cap/rate-limit reasoning from the initial generati
 category regeneration (where a full gap is far less likely, since it's one call against requirements
 that already generated successfully once) wasn't worth the extra complexity.
 
+### One shared orchestration function, two callers
+`pipeline/src/orchestrator/generate-kit.ts`'s `generateKit()` is the entire crawl -> extract ->
+generate -> coverage -> schedule -> validate sequence, callable with no Express/Mongoose/CLI
+dependency. The backend's `runGenerationJob` calls it and layers job-state persistence (progress
+callbacks -> `job.status`/`job.progress` writes) and duplicate-submission/stale-job handling on
+top; the CLI's `evaluate()` calls the exact same function per case with no progress callback and
+writes the result straight to the batch output file. Neither reimplements the sequence — this was
+a deliberate refactor at the start of Phase 6 (it originally lived inline in
+`backend/src/orchestration/generate-kit.ts`) specifically so the CLI wouldn't have to duplicate it,
+per the brief's "no parallel implementation" requirement.
+
 ## Workspace layout
-- `pipeline/` — shared retrieval/extraction/generation/coverage/schedule logic + the Zod kit schema
+- `pipeline/` — shared retrieval/extraction/generation/coverage/schedule/orchestration logic + the
+  Zod kit schema. `orchestrator/generate-kit.ts` is the single generation entry point both the
+  backend and CLI call.
 - `backend/` — Express API (auth, kit CRUD, job orchestration)
 - `frontend/` — Next.js UI
-- `cli/` — batch evaluation entry point (`npm run evaluate`)
+- `cli/` — batch evaluation entry point (`npm run evaluate -- --input cases.json --output kits.json`)
 
 ## Local setup
 ```

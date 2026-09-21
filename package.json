@@ -13,7 +13,7 @@
     "test": "npm run test --workspaces --if-present",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
-    "evaluate": "npm run evaluate --workspace=cli --"
+    "evaluate": "tsx cli/src/index.ts"
   },
   "engines": {
     "node": ">=20"
