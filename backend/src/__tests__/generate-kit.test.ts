@@ -2,7 +2,7 @@ import { validateKit } from "@aipk/pipeline";
 import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Kit } from "../models/Kit.js";
-import { computeRequestHash, findOrCreateKitJob, runGenerationJob } from "../orchestration/generate-kit.js";
+import { computeRequestHash, findOrCreateKitJob, runGenerationJob, sweepStaleJobs } from "../orchestration/generate-kit.js";
 import { clearTestDb, startTestDb, stopTestDb } from "./mongo-test-utils.js";
 
 beforeAll(startTestDb);
@@ -37,6 +37,73 @@ describe("findOrCreateKitJob — duplicate-submission handling", () => {
     const first = await findOrCreateKitJob(new mongoose.Types.ObjectId().toString(), BASE_INPUT);
     const second = await findOrCreateKitJob(new mongoose.Types.ObjectId().toString(), BASE_INPUT);
     expect(first.kit.id).not.toBe(second.kit.id);
+  });
+
+  it("resets and restarts a stuck job on resubmission instead of returning it inert forever", async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const { kit } = await findOrCreateKitJob(userId, BASE_INPUT);
+
+    // simulate a crash mid-run: stuck in "researching", last touched long ago.
+    // Bypass Mongoose's automatic timestamps by writing through the raw
+    // driver, since .save()/findOneAndUpdate would refresh updatedAt to now.
+    await Kit.collection.updateOne(
+      { _id: kit._id },
+      { $set: { "job.status": "researching", updatedAt: new Date(Date.now() - 10 * 60 * 1000) } },
+    );
+
+    const result = await findOrCreateKitJob(userId, BASE_INPUT);
+    expect(result.isNew).toBe(true);
+    expect(result.kit.id).toBe(kit.id);
+    expect(result.kit.job.status).toBe("pending");
+  });
+
+  it("does not disturb a job that's merely slow but still recent", async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const { kit } = await findOrCreateKitJob(userId, BASE_INPUT);
+    await Kit.findByIdAndUpdate(kit.id, { "job.status": "generating" });
+
+    const result = await findOrCreateKitJob(userId, BASE_INPUT);
+    expect(result.isNew).toBe(false);
+    expect(result.kit.job.status).toBe("generating");
+  });
+});
+
+describe("sweepStaleJobs", () => {
+  it("marks a stuck non-terminal job as failed with STALE_JOB once past the timeout", async () => {
+    const { kit } = await findOrCreateKitJob(new mongoose.Types.ObjectId().toString(), BASE_INPUT);
+    await Kit.collection.updateOne(
+      { _id: kit._id },
+      { $set: { "job.status": "generating", updatedAt: new Date(Date.now() - 10 * 60 * 1000) } },
+    );
+
+    const swept = await sweepStaleJobs(5 * 60 * 1000);
+    expect(swept).toBe(1);
+
+    const updated = await Kit.findById(kit.id).lean();
+    expect(updated!.job.status).toBe("failed");
+    expect((updated!.job.error as { code: string }).code).toBe("STALE_JOB");
+  });
+
+  it("leaves a recent non-terminal job alone", async () => {
+    const { kit } = await findOrCreateKitJob(new mongoose.Types.ObjectId().toString(), BASE_INPUT);
+    await Kit.findByIdAndUpdate(kit.id, { "job.status": "generating" });
+
+    const swept = await sweepStaleJobs(5 * 60 * 1000);
+    expect(swept).toBe(0);
+
+    const updated = await Kit.findById(kit.id).lean();
+    expect(updated!.job.status).toBe("generating");
+  });
+
+  it("never touches a terminal (ready/failed) job", async () => {
+    const { kit } = await findOrCreateKitJob(new mongoose.Types.ObjectId().toString(), BASE_INPUT);
+    await Kit.collection.updateOne(
+      { _id: kit._id },
+      { $set: { "job.status": "ready", updatedAt: new Date(Date.now() - 60 * 60 * 1000) } },
+    );
+
+    const swept = await sweepStaleJobs(5 * 60 * 1000);
+    expect(swept).toBe(0);
   });
 });
 

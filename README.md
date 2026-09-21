@@ -4,8 +4,9 @@ Full-stack app that turns a job description + company URL + days-until-interview
 structured interview prep kit (company brief, role breakdown, question bank, flashcards,
 day-by-day schedule).
 
-**Status:** Phases 1-4 (scaffold/data model, retrieval, generation, coverage+schedule) complete.
-See commit history for progress. Full architecture/setup docs will be filled in during Phase 8.
+**Status:** Phases 1-5 (scaffold/data model, retrieval, generation, coverage+schedule, backend
+orchestration) complete. See commit history for progress. Full architecture/setup docs will be
+filled in during Phase 8.
 
 ## Design notes
 
@@ -28,17 +29,44 @@ gap-fill pass scoped to just those requirements, then stops regardless of outcom
   least one requirement, so a gap only survives if Gemini fails validation in a way the heuristic
   also can't fill, which shouldn't happen given the fallback's design.
 
-### Gemini call volume per kit and rate limiting (known gap, deferred to Phase 5/6)
+### Gemini call volume per kit and rate limiting
 Worst case per kit: 1 (requirement extraction) + 1 (company brief) + 4 (one per question category)
 + up to 4 more (second coverage pass, scoped per category with a gap) + 1 (flashcards) = up to 11
-Gemini calls. Today, nothing caps how many of these run concurrently — `generateQuestionBank`
-fires its 4 category calls via a bare `Promise.all`, and `gemini-client.ts` only backs off *after*
-a 429 already happened (reusing `retrieval/rate-limit.ts`'s `backoffDelayMs`), it doesn't prevent
-bursts. `retrieval/rate-limit.ts`'s `createConcurrencyLimiter` is wired up for page-fetch
-concurrency in the crawler but not for Gemini calls. This needs a single shared limiter instance
-once Phase 5 (backend job orchestration) and Phase 6 (CLI batch concurrency) exist, so a kit's
-internal fan-out and cross-kit/cross-case concurrency don't stack multiplicatively against the
-same free-tier rate limit. Deliberately not fixed in isolation before those callers exist.
+Gemini calls. As of Phase 5, `backend/src/orchestration/gemini-config.ts` wraps `fetch` itself with
+a single process-wide `createConcurrencyLimiter` (reused from `retrieval/rate-limit.ts`, not a
+second implementation) so every pipeline call sharing that config — a kit's 4-category fan-out,
+and every concurrently-running kit's job — is throttled together rather than each burst stacking
+independently. `gemini-client.ts`'s own backoff still only reacts *after* a 429; the limiter is
+what prevents the burst in the first place. Phase 6's CLI will need its own instance of the same
+pattern for cross-case concurrency within its own process (a separate Node process, so it can't
+share the backend's in-memory limiter — see the note in that phase once written).
+
+### Job crash/restart recovery
+A kit's `job.status` is a state machine (`pending -> researching -> generating -> checking ->
+ready|failed`) persisted on every stage transition. If the backend process dies or restarts while
+a job is mid-run, the doc would otherwise sit stuck at that status forever, and — since duplicate-
+submission handling matches on `requestHash` regardless of job status — resubmitting the same
+input would just return the stuck kit again with no way to retry it. `sweepStaleJobs()` in
+`generate-kit.ts` handles this: any kit in a non-terminal status whose `updatedAt` (Mongoose's
+built-in timestamp, bumped on every stage-transition write) is older than `STALE_JOB_TIMEOUT_MS`
+(5 minutes — generous relative to the ~60-90s a healthy run takes) is marked `failed` with a
+`STALE_JOB` error. This runs once at server startup (recovers jobs orphaned by the crash that just
+happened) and on a 1-minute interval (catches a job that hangs without the process dying).
+`findOrCreateKitJob` also checks staleness directly on resubmission, resetting a stuck kit to
+`pending` and restarting its job rather than waiting for the next sweep tick. Nothing here attempts
+to *resume* a partially-completed run (resume mid-crawl or mid-generation isn't something the
+pipeline is built for) — failing cleanly and letting the user resubmit is the safe behavior.
+
+### Section regeneration doesn't self-heal coverage gaps
+`regenerateSection`'s category regen makes one `generateQuestionsForCategory` call, then rechecks
+coverage with the pure `findUncoveredRequirementIds` — it does not re-run `runCoverageLoop`'s
+gap-fill pass. If that single call happens to leave a must-requirement in that category uncovered,
+`validateKit`'s cross-field check fails the whole regeneration and nothing is persisted — the
+stored kit is untouched, and the user can just click regenerate again. This is a deliberate
+reject-and-retry choice over self-healing: it's simple, it can never corrupt a previously-valid
+kit, and duplicating the pass-cap/rate-limit reasoning from the initial generation for a single-
+category regeneration (where a full gap is far less likely, since it's one call against requirements
+that already generated successfully once) wasn't worth the extra complexity.
 
 ## Workspace layout
 - `pipeline/` — shared retrieval/extraction/generation/coverage/schedule logic + the Zod kit schema

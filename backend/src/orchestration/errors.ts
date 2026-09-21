@@ -6,6 +6,7 @@ export type ErrorCode =
   | "COMPANY_UNREACHABLE"
   | "LLM_UNAVAILABLE"
   | "KIT_VALIDATION_FAILED"
+  | "STALE_JOB"
   | "INTERNAL_ERROR";
 
 const STATUS_BY_CODE: Record<ErrorCode, number> = {
@@ -16,6 +17,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   COMPANY_UNREACHABLE: 422,
   LLM_UNAVAILABLE: 502,
   KIT_VALIDATION_FAILED: 500,
+  STALE_JOB: 500,
   INTERNAL_ERROR: 500,
 };
 

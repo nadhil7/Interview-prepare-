@@ -38,11 +38,63 @@ export interface FindOrCreateResult {
   isNew: boolean;
 }
 
-/** Duplicate-submission handling: same user + same (jd, companyUrl, days) returns the existing kit instead of regenerating. */
+/**
+ * How long a job can sit in a non-terminal status before it's considered
+ * abandoned — e.g. the process died mid-"researching"/"generating" and
+ * nothing is ever going to finish it. Generous relative to the ~60-90s a
+ * healthy run takes, so it only catches genuinely stuck jobs, not slow ones.
+ */
+export const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
+const NON_TERMINAL_STATUSES = ["pending", "researching", "generating", "checking"];
+
+function isStaleNonTerminalJob(status: string, updatedAt: Date | undefined): boolean {
+  if (!NON_TERMINAL_STATUSES.includes(status) || !updatedAt) return false;
+  return Date.now() - updatedAt.getTime() > STALE_JOB_TIMEOUT_MS;
+}
+
+/**
+ * Sweeps every kit stuck in a non-terminal job status past the staleness
+ * timeout and marks it "failed" with a STALE_JOB error. Run once at server
+ * startup (recovers jobs orphaned by a crash/restart) and on an interval
+ * (catches a job that hangs without the whole process dying). Nothing here
+ * attempts to resume a partially-completed run — the pipeline isn't built
+ * to pick up mid-crawl or mid-generation, so failing cleanly and letting
+ * the user resubmit is the safe behavior.
+ */
+export async function sweepStaleJobs(timeoutMs: number = STALE_JOB_TIMEOUT_MS): Promise<number> {
+  const cutoff = new Date(Date.now() - timeoutMs);
+  const result = await Kit.updateMany(
+    { "job.status": { $in: NON_TERMINAL_STATUSES }, updatedAt: { $lt: cutoff } },
+    {
+      "job.status": "failed",
+      "job.error": {
+        code: "STALE_JOB",
+        message: `Job did not reach a terminal status within ${timeoutMs}ms (process likely crashed or restarted mid-run) and was marked failed.`,
+      },
+    },
+  );
+  return result.modifiedCount;
+}
+
+/**
+ * Duplicate-submission handling: same user + same (jd, companyUrl, days)
+ * returns the existing kit instead of regenerating — unless that existing
+ * kit's job is stuck (stale non-terminal status), in which case it's reset
+ * to "pending" and returned as if new, so the caller restarts generation on
+ * it rather than the user being permanently stuck on that exact input.
+ */
 export async function findOrCreateKitJob(userId: string, input: CreateKitInput): Promise<FindOrCreateResult> {
   const requestHash = computeRequestHash(input);
   const existing = await Kit.findOne({ userId, requestHash });
-  if (existing) return { kit: existing, isNew: false };
+  if (existing) {
+    const updatedAt = (existing as unknown as { updatedAt?: Date }).updatedAt;
+    if (isStaleNonTerminalJob(existing.job?.status ?? "", updatedAt)) {
+      existing.job = { status: "pending", progress: 0, error: null };
+      await existing.save();
+      return { kit: existing, isNew: true };
+    }
+    return { kit: existing, isNew: false };
+  }
 
   const kit = await Kit.create({
     userId,
