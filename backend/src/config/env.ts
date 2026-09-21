@@ -1,3 +1,4 @@
+import { DEFAULT_GEMINI_MODEL } from "@aipk/pipeline";
 import "dotenv/config";
 import { z } from "zod";
 
@@ -7,6 +8,7 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().min(1).default(DEFAULT_GEMINI_MODEL),
 });
 
 export type Env = z.infer<typeof envSchema>;
