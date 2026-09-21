@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { fetchTextCapped } from "./http-safety.js";
 
 export interface DiscussionResult {
   title: string;
@@ -23,28 +24,33 @@ export interface SearchOptions {
  * company's interview process. no api key needed, which fits the free
  * tier the rest of this project runs on. if nothing useful turns up, or
  * the request fails, that gets written into note honestly instead of
- * making something up.
+ * making something up. goes through fetchTextCapped like every other
+ * outbound fetch in this project, so a huge or slow response can't hang
+ * the run or eat unbounded memory.
  */
 export async function searchPublicInterviewDiscussion(
   companyName: string,
   options: SearchOptions,
 ): Promise<DiscussionSearchOutcome> {
-  const fetchImpl = options.fetchImpl ?? fetch;
   const query = `${companyName} interview process experience`;
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
-  let html: string;
-  try {
-    const res = await fetchImpl(url, { headers: { "User-Agent": options.userAgent } });
-    if (!res.ok) {
-      return { found: false, results: [], note: `search request failed with status ${res.status}` };
-    }
-    html = await res.text();
-  } catch (err) {
-    return { found: false, results: [], note: `search unavailable: ${(err as Error).message}` };
+  const result = await fetchTextCapped(url, {
+    fetchImpl: options.fetchImpl,
+    headers: { "User-Agent": options.userAgent },
+  });
+
+  if (!result.ok) {
+    const note =
+      result.reason.type === "http_status"
+        ? `search request failed with status ${result.reason.status}`
+        : result.reason.type === "network_error"
+          ? `search unavailable: ${result.reason.message}`
+          : `search response was rejected (${result.reason.type})`;
+    return { found: false, results: [], note };
   }
 
-  const results = parseDuckDuckGoHtml(html);
+  const results = parseDuckDuckGoHtml(result.text);
   if (results.length === 0) {
     return { found: false, results: [], note: "no public discussion of the interview process was found" };
   }

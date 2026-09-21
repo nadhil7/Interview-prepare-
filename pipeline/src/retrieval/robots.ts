@@ -1,6 +1,10 @@
+import { fetchTextCapped } from "./http-safety.js";
+
 export interface RobotsRules {
   disallowedPaths: string[];
 }
+
+const MAX_ROBOTS_BYTES = 200_000;
 
 /**
  * a small robots.txt reader. it finds the group that matches our user
@@ -50,15 +54,17 @@ export async function fetchRobotsRules(
   userAgent: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<RobotsRules> {
-  try {
-    const robotsUrl = new URL("/robots.txt", baseUrl).toString();
-    const res = await fetchImpl(robotsUrl, { headers: { "User-Agent": userAgent } });
-    if (!res.ok) return { disallowedPaths: [] };
-    const text = await res.text();
-    return parseRobotsTxt(text, userAgent);
-  } catch {
-    // if robots.txt can't be reached, allow everything by default. that
-    // matches how most crawlers behave, since a missing file isn't a rule.
-    return { disallowedPaths: [] };
-  }
+  const robotsUrl = new URL("/robots.txt", baseUrl).toString();
+  const result = await fetchTextCapped(robotsUrl, {
+    fetchImpl,
+    maxBytes: MAX_ROBOTS_BYTES,
+    headers: { "User-Agent": userAgent },
+  });
+
+  // if robots.txt can't be reached, is too large, or anything else goes
+  // wrong, allow everything by default. that matches how most crawlers
+  // behave, since a missing or broken file isn't a rule.
+  if (!result.ok) return { disallowedPaths: [] };
+
+  return parseRobotsTxt(result.text, userAgent);
 }

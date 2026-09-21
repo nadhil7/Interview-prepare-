@@ -19,8 +19,9 @@ function fakeFetch(response: { ok: boolean; status?: number; text: string }): ty
     ({
       ok: response.ok,
       status: response.status ?? (response.ok ? 200 : 500),
+      headers: { get: () => null },
       text: async () => response.text,
-    }) as Response) as typeof fetch;
+    }) as unknown as Response) as typeof fetch;
 }
 
 describe("parseDuckDuckGoHtml", () => {
@@ -66,5 +67,19 @@ describe("searchPublicInterviewDiscussion", () => {
     });
     expect(outcome.found).toBe(false);
     expect(outcome.note).toMatch(/503/);
+  });
+
+  it("rejects a response that declares a size over the cap instead of reading it", async () => {
+    const fetchImpl = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        headers: { get: (key: string) => (key.toLowerCase() === "content-length" ? "999999999" : null) },
+        text: async () => SAMPLE_RESULTS_HTML,
+      }) as unknown as Response) as typeof fetch;
+
+    const outcome = await searchPublicInterviewDiscussion("Acme", { userAgent: "AIPKBot", fetchImpl });
+    expect(outcome.found).toBe(false);
+    expect(outcome.results).toEqual([]);
   });
 });

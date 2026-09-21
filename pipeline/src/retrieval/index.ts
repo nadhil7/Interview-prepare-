@@ -1,4 +1,5 @@
 export * from "./url-validator.js";
+export * from "./http-safety.js";
 export * from "./domain.js";
 export * from "./link-scoring.js";
 export * from "./robots.js";

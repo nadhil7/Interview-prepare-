@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { isPathAllowed, parseRobotsTxt } from "../robots.js";
+import { fetchRobotsRules, isPathAllowed, parseRobotsTxt } from "../robots.js";
+
+function fakeFetch(response: { ok: boolean; text?: string; headers?: Record<string, string> }): typeof fetch {
+  return (async () =>
+    ({
+      ok: response.ok,
+      status: response.ok ? 200 : 404,
+      headers: { get: (key: string) => response.headers?.[key.toLowerCase()] ?? null },
+      text: async () => response.text ?? "",
+    }) as unknown as Response) as typeof fetch;
+}
 
 describe("parseRobotsTxt", () => {
   it("collects Disallow rules for a wildcard group", () => {
@@ -47,6 +57,26 @@ describe("parseRobotsTxt", () => {
       Disallow: /secret # also a comment
     `;
     expect(parseRobotsTxt(content, "AIPKBot").disallowedPaths).toEqual(["/secret"]);
+  });
+});
+
+describe("fetchRobotsRules", () => {
+  it("fetches and parses a reachable robots.txt", async () => {
+    const fetchImpl = fakeFetch({ ok: true, text: "User-agent: *\nDisallow: /admin" });
+    const rules = await fetchRobotsRules("https://acme.example/", "AIPKBot", fetchImpl);
+    expect(rules.disallowedPaths).toEqual(["/admin"]);
+  });
+
+  it("allows everything when robots.txt is unreachable", async () => {
+    const fetchImpl = fakeFetch({ ok: false });
+    const rules = await fetchRobotsRules("https://acme.example/", "AIPKBot", fetchImpl);
+    expect(rules.disallowedPaths).toEqual([]);
+  });
+
+  it("allows everything rather than reading an oversized robots.txt", async () => {
+    const fetchImpl = fakeFetch({ ok: true, text: "User-agent: *\nDisallow: /admin", headers: { "content-length": "99999999" } });
+    const rules = await fetchRobotsRules("https://acme.example/", "AIPKBot", fetchImpl);
+    expect(rules.disallowedPaths).toEqual([]);
   });
 });
 
