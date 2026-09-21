@@ -58,6 +58,26 @@ describe("auth flow", () => {
     expect(meAfter.body.email).toBe("me-check@example.com");
   });
 
+  it("sets the auth cookie as SameSite=Lax, not Secure in development", async () => {
+    const res = await request(app).post("/api/auth/register").send({ email: "cookie-dev@example.com", password: "correct-horse" });
+    const setCookie = res.headers["set-cookie"]![0]!;
+    expect(setCookie).toMatch(/SameSite=Lax/i);
+    expect(setCookie).not.toMatch(/Secure/i);
+  });
+
+  it("sets the auth cookie as SameSite=None; Secure in production, so it survives a cross-site request from a deployed frontend on a different domain", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const res = await request(app).post("/api/auth/register").send({ email: "cookie-prod@example.com", password: "correct-horse" });
+      const setCookie = res.headers["set-cookie"]![0]!;
+      expect(setCookie).toMatch(/SameSite=None/i);
+      expect(setCookie).toMatch(/Secure/i);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
+
   it("rejects login with wrong password", async () => {
     await request(app)
       .post("/api/auth/register")
