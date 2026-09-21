@@ -9,6 +9,7 @@
     "frontend"
   ],
   "scripts": {
+    "prepare": "npm run build --workspace=pipeline",
     "build": "npm run build --workspace=pipeline && npm run build --workspace=backend && npm run build --workspace=cli",
     "test": "npm run test --workspaces --if-present",
     "dev:backend": "npm run dev --workspace=backend",
