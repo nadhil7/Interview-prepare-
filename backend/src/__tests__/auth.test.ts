@@ -4,7 +4,11 @@ import { createApp } from "../app.js";
 import { clearTestDb, startTestDb, stopTestDb } from "./mongo-test-utils.js";
 
 const JWT_SECRET = "test-secret";
-const app = createApp(JWT_SECRET);
+const app = createApp({
+  jwtSecret: JWT_SECRET,
+  geminiConfig: { apiKey: undefined },
+  urlValidatorOptions: { blockPrivateNetworks: false },
+});
 
 beforeAll(startTestDb);
 afterEach(clearTestDb);
