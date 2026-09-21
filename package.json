@@ -1,0 +1,21 @@
+{
+  "name": "ai-interview-prep-kit",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "pipeline",
+    "backend",
+    "cli",
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=pipeline && npm run build --workspace=backend && npm run build --workspace=cli",
+    "test": "npm run test --workspaces --if-present",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "evaluate": "npm run evaluate --workspace=cli --"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

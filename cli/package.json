@@ -1,0 +1,22 @@
+{
+  "name": "@aipk/cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "aipk-evaluate": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "evaluate": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@aipk/pipeline": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}
