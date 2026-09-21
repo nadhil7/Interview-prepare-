@@ -64,6 +64,19 @@ const kitSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     requestHash: { type: String, index: true },
 
+    /**
+     * Raw research inputs the LLM calls were grounded in, kept around so
+     * section regeneration (brief, a question category) reuses the same
+     * retrieved material rather than re-crawling the company site or
+     * re-running the discussion search on every regenerate click. Additive
+     * — not part of the strict kit contract, stripped by validateKit's
+     * non-strict parsing.
+     */
+    research: {
+      pages: { type: [{ url: String, text: String }], default: [] },
+      hiringProcessNotes: { type: String, default: "" },
+    },
+
     job: {
       status: {
         type: String,
