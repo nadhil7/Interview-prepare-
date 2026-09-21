@@ -119,12 +119,32 @@ export function heuristicQuestionsForCategory(
   }));
 }
 
+/**
+ * Which requirements feed which category's LLM call. Exported so callers
+ * that regenerate a single category later (e.g. the backend's section
+ * regeneration endpoint) route the same requirements into it that the
+ * initial full-bank generation did — one mapping, not a second copy of it.
+ */
+export function getCategoryRequirements(category: QuestionCategory, requirements: Requirement[]): Requirement[] {
+  switch (category) {
+    case "technical":
+    case "system-design":
+      return requirements.filter((r) => r.kind === "technical");
+    case "behavioural":
+      return requirements.filter((r) => r.kind === "behavioural");
+    case "company-fit":
+      return requirements.filter((r) => r.kind === "domain");
+  }
+}
+
 export interface GenerateQuestionBankOptions {
   requirements: Requirement[];
   companyContext: string;
   hiringProcessNotes?: string;
   geminiConfig: GeminiClientConfig;
 }
+
+const ALL_CATEGORIES: QuestionCategory[] = ["technical", "behavioural", "system-design", "company-fit"];
 
 /**
  * Four separate LLM calls, one per category — never one call asked to
@@ -134,24 +154,23 @@ export interface GenerateQuestionBankOptions {
  * behavioural fallback question, not padded technical content).
  */
 export async function generateQuestionBank(options: GenerateQuestionBankOptions): Promise<GeneratedQuestion[]> {
-  const technicalReqs = options.requirements.filter((r) => r.kind === "technical");
-  const behaviouralReqs = options.requirements.filter((r) => r.kind === "behavioural");
-  const domainReqs = options.requirements.filter((r) => r.kind === "domain");
-
   const shared = {
     companyContext: options.companyContext,
     hiringProcessNotes: options.hiringProcessNotes,
     geminiConfig: options.geminiConfig,
   };
 
-  const [technical, behavioural, systemDesign, companyFit] = await Promise.all([
-    generateQuestionsForCategory({ category: "technical", requirements: technicalReqs, ...shared }),
-    generateQuestionsForCategory({ category: "behavioural", requirements: behaviouralReqs, ...shared }),
-    generateQuestionsForCategory({ category: "system-design", requirements: technicalReqs, ...shared }),
-    generateQuestionsForCategory({ category: "company-fit", requirements: domainReqs, ...shared }),
-  ]);
+  const results = await Promise.all(
+    ALL_CATEGORIES.map((category) =>
+      generateQuestionsForCategory({
+        category,
+        requirements: getCategoryRequirements(category, options.requirements),
+        ...shared,
+      }),
+    ),
+  );
 
-  return [...technical, ...behavioural, ...systemDesign, ...companyFit];
+  return results.flat();
 }
 
 export function assignQuestionIds(questions: GeneratedQuestion[], startIndex = 1): Question[] {
