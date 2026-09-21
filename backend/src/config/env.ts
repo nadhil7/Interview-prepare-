@@ -1,6 +1,15 @@
 import { DEFAULT_GEMINI_MODEL } from "@aipk/pipeline";
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { z } from "zod";
+
+// loads the .env file from the repo root, not from wherever the process
+// happens to be run from. npm run --workspace changes the working
+// directory to the workspace folder, so relying on dotenv's default
+// lookup would miss the root .env when this runs from inside backend
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../");
+loadDotenv({ path: path.join(repoRoot, ".env") });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
