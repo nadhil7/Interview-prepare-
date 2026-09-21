@@ -1,0 +1,80 @@
+import bcrypt from "bcryptjs";
+import { Router } from "express";
+import { z } from "zod";
+import { User } from "../models/User.js";
+import { AUTH_COOKIE_NAME, signAuthToken } from "../middleware/auth.js";
+
+const credentialsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function createAuthRouter(jwtSecret: string): Router {
+  const router = Router();
+
+  router.post("/register", async (req, res) => {
+    const parsed = credentialsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input", details: parsed.error.issues });
+      return;
+    }
+    const { email, password } = parsed.data;
+
+    const existing = await User.findOne({ email }).lean();
+    if (existing) {
+      res.status(409).json({ error: "email_taken" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({ email, passwordHash });
+
+    const token = signAuthToken(user.id, jwtSecret);
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SEVEN_DAYS_MS,
+    });
+    res.status(201).json({ id: user.id, email: user.email });
+  });
+
+  router.post("/login", async (req, res) => {
+    const parsed = credentialsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input", details: parsed.error.issues });
+      return;
+    }
+    const { email, password } = parsed.data;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      res.status(401).json({ error: "invalid_credentials" });
+      return;
+    }
+
+    const matches = await bcrypt.compare(password, user.passwordHash);
+    if (!matches) {
+      res.status(401).json({ error: "invalid_credentials" });
+      return;
+    }
+
+    const token = signAuthToken(user.id, jwtSecret);
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SEVEN_DAYS_MS,
+    });
+    res.status(200).json({ id: user.id, email: user.email });
+  });
+
+  router.post("/logout", (_req, res) => {
+    res.clearCookie(AUTH_COOKIE_NAME);
+    res.status(204).send();
+  });
+
+  return router;
+}
