@@ -3,7 +3,7 @@ import type { Flashcard, Question, Requirement } from "../schema/kit.js";
 import { generateJson, GeminiUnavailableError, type GeminiClientConfig } from "./gemini-client.js";
 import { UNTRUSTED_DATA_WARNING, wrapUntrustedContent } from "./prompt-safety.js";
 
-export type GeneratedFlashcard = Omit<Flashcard, "id" | "origin" | "status">;
+export type GeneratedFlashcard = Omit<Flashcard, "id" | "origin" | "status" | "confidence" | "seen">;
 
 const generatedFlashcardSchema = z.object({
   front: z.string().min(1),
@@ -81,5 +81,12 @@ export function heuristicFlashcards(questions: Question[]): GeneratedFlashcard[]
 }
 
 export function assignFlashcardIds(flashcards: GeneratedFlashcard[], startIndex = 1): Flashcard[] {
-  return flashcards.map((f, i) => ({ ...f, id: `f${startIndex + i}`, origin: "generated", status: "pristine" }));
+  return flashcards.map((f, i) => ({
+    ...f,
+    id: `f${startIndex + i}`,
+    origin: "generated",
+    status: "pristine",
+    confidence: null,
+    seen: false,
+  }));
 }

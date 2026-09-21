@@ -40,6 +40,8 @@ export const questionSchema = z.object({
   status: itemStatusSchema.default("pristine"),
 });
 
+export const flashcardConfidenceSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+
 export const flashcardSchema = z.object({
   id: z.string().min(1),
   front: z.string().min(1),
@@ -47,6 +49,8 @@ export const flashcardSchema = z.object({
   requirement_ids: z.array(z.string().min(1)),
   origin: itemOriginSchema.default("generated"),
   status: itemStatusSchema.default("pristine"),
+  confidence: flashcardConfidenceSchema.nullable().default(null),
+  seen: z.boolean().default(false),
 });
 
 export const scheduleDaySchema = z.object({
