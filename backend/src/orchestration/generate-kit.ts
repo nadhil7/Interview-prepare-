@@ -1,24 +1,7 @@
 import crypto from "node:crypto";
-import {
-  allocateSchedule,
-  assignFlashcardIds,
-  assignQuestionIds,
-  crawlCompanySite,
-  extractRequirements,
-  generateCompanyBrief,
-  generateFlashcards,
-  generateQuestionBank,
-  runCoverageLoop,
-  searchPublicInterviewDiscussion,
-  validateKit,
-  validateUrl,
-  type GeminiClientConfig,
-} from "@aipk/pipeline";
+import { generateKit as pipelineGenerateKit, PipelineError, type GeminiClientConfig } from "@aipk/pipeline";
 import { Kit, type KitDocument } from "../models/Kit.js";
-import { deriveCompanyNameFromUrl, deriveRoleBasics } from "./derive.js";
 import { AppError } from "./errors.js";
-
-export const USER_AGENT = "AIInterviewPrepKitBot/1.0 (+https://github.com/aipk)";
 
 export interface CreateKitInput {
   jd: string;
@@ -116,21 +99,22 @@ export async function findOrCreateKitJob(userId: string, input: CreateKitInput):
   return { kit, isNew: true };
 }
 
-async function setJobStatus(
-  kitId: string,
-  status: "researching" | "generating" | "checking" | "ready" | "failed",
-  progress: number,
-  extra: Record<string, unknown> = {},
-): Promise<void> {
-  await Kit.findByIdAndUpdate(kitId, { "job.status": status, "job.progress": progress, ...extra });
-}
+const PROGRESS_BY_STAGE: Record<"researching" | "generating" | "checking", number> = {
+  researching: 5,
+  generating: 25,
+  checking: 70,
+};
 
 /**
- * The full pipeline glue, run as a background job so the request/response
- * cycle isn't blocked on 60-90s+ of crawling + LLM calls. Every stage
- * persists job.status/progress so the poll endpoint reflects real
- * progress; any failure lands the kit in job.status "failed" with a
- * structured {code,message} in job.error instead of throwing into the void.
+ * The backend's half of the job state machine: calls pipeline's shared
+ * generateKit (the exact same function the CLI's batch evaluator calls —
+ * no parallel implementation of the crawl->extract->generate->coverage-
+ * >schedule sequence) as a background task, persisting job.status/progress
+ * on every stage transition so a poll endpoint reflects real progress
+ * without blocking the request/response cycle on 60-90s+ of work. Any
+ * failure — SSRF-rejected URL, final structure validation failing — lands
+ * the job in "failed" with a structured {code,message} instead of an
+ * unhandled background rejection.
  */
 export async function runGenerationJob(
   kitId: string,
@@ -139,88 +123,28 @@ export async function runGenerationJob(
   urlValidatorOptions: { blockPrivateNetworks: boolean },
 ): Promise<void> {
   try {
-    await setJobStatus(kitId, "researching", 5);
-
-    const initialValidation = await validateUrl(input.companyUrl, urlValidatorOptions);
-    if (!initialValidation.ok) {
-      throw new AppError("COMPANY_UNREACHABLE", `Company URL rejected: ${initialValidation.reason}`);
-    }
-
-    const crawl = await crawlCompanySite(input.companyUrl, { userAgent: USER_AGENT, urlValidatorOptions });
-    const companyName = deriveCompanyNameFromUrl(input.companyUrl);
-    const discussion = await searchPublicInterviewDiscussion(companyName, { userAgent: USER_AGENT });
-    const hiringProcessNotes = discussion.found
-      ? discussion.results.map((r) => `${r.title}: ${r.snippet}`).join("\n")
-      : discussion.note;
-
-    const researchPages = crawl.pages.map((p) => ({ url: p.finalUrl, text: p.text }));
-    const { title, seniority } = deriveRoleBasics(input.jd);
-
-    await setJobStatus(kitId, "generating", 25, {
-      research: { pages: researchPages, hiringProcessNotes },
-      source: {
-        company: companyName,
-        company_url: input.companyUrl,
-        role: title,
-        location: "",
-        jd_chars: input.jd.length,
-        researched_at: new Date().toISOString(),
-        pages_used: crawl.pages.map((p) => p.finalUrl),
-      },
-      "role.title": title,
-      "role.seniority": seniority,
+    const result = await pipelineGenerateKit(input, { geminiConfig, urlValidatorOptions }, async (stage, partial) => {
+      await Kit.findByIdAndUpdate(kitId, {
+        "job.status": stage,
+        "job.progress": PROGRESS_BY_STAGE[stage],
+        ...partial,
+      });
     });
 
-    const requirements = await extractRequirements(input.jd, { geminiConfig });
-    const brief = await generateCompanyBrief(companyName, researchPages, geminiConfig);
-    const companyContext = `${brief.summary}\n${brief.what_they_do}`;
-
-    const initialQuestions = assignQuestionIds(
-      await generateQuestionBank({ requirements, companyContext, hiringProcessNotes, geminiConfig }),
-    );
-
-    await setJobStatus(kitId, "checking", 70);
-
-    const coverageResult = await runCoverageLoop({
-      requirements,
-      initialQuestions,
-      companyContext,
-      hiringProcessNotes,
-      geminiConfig,
+    await Kit.findByIdAndUpdate(kitId, {
+      ...result.kit,
+      research: { pages: result.researchPages, hiringProcessNotes: result.hiringProcessNotes },
+      "job.status": "ready",
+      "job.progress": 100,
+      "job.error": null,
     });
-
-    const flashcards = assignFlashcardIds(
-      await generateFlashcards({ requirements, questions: coverageResult.questions, geminiConfig }),
-    );
-
-    const schedule = allocateSchedule(coverageResult.questions, requirements, input.days);
-
-    const finalKit = {
-      source: {
-        company: companyName,
-        company_url: input.companyUrl,
-        role: title,
-        location: "",
-        jd_chars: input.jd.length,
-        researched_at: new Date().toISOString(),
-        pages_used: crawl.pages.map((p) => p.finalUrl),
-      },
-      company_brief: brief,
-      role: { title, seniority, responsibilities: [], requirements },
-      questions: coverageResult.questions,
-      flashcards,
-      schedule,
-      coverage: { uncovered_requirement_ids: coverageResult.uncoveredRequirementIds, passes: coverageResult.passes },
-    };
-
-    const validation = validateKit(finalKit);
-    if (!validation.ok) {
-      throw new AppError("KIT_VALIDATION_FAILED", `Generated kit failed structure validation: ${validation.errors.join("; ")}`);
-    }
-
-    await setJobStatus(kitId, "ready", 100, { ...finalKit, "job.error": null });
   } catch (err) {
-    const appError = err instanceof AppError ? err : new AppError("INTERNAL_ERROR", (err as Error).message || "unknown error");
+    const appError =
+      err instanceof PipelineError
+        ? new AppError(err.code, err.message)
+        : err instanceof AppError
+          ? err
+          : new AppError("INTERNAL_ERROR", (err as Error).message || "unknown error");
     await Kit.findByIdAndUpdate(kitId, { "job.status": "failed", "job.error": appError.toJSON() });
   }
 }

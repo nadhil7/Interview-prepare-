@@ -1,4 +1,4 @@
-import { createConcurrencyLimiter, type GeminiClientConfig } from "@aipk/pipeline";
+import { createLimitedFetch, type GeminiClientConfig } from "@aipk/pipeline";
 import type { Env } from "../config/env.js";
 
 /**
@@ -7,16 +7,15 @@ import type { Env } from "../config/env.js";
  * kit's generation job. This is the fix for the gap flagged in Phase 3/4 —
  * gemini-client.ts's retry/backoff only reacts after a 429 already
  * happened, it never capped how many requests could be in flight at once.
- * Wrapping the fetch implementation itself (rather than changing any
- * pipeline call site) means every pipeline function that takes a
- * GeminiClientConfig is throttled for free, with no pipeline changes.
+ * createLimitedFetch (pipeline/src/generation/gemini-rate-limit.ts) wraps
+ * the fetch implementation itself, so every pipeline function that takes a
+ * GeminiClientConfig is throttled for free, with no pipeline changes. The
+ * CLI creates its own separate instance of the same helper for its own
+ * process — they can't share a limiter across process boundaries.
  */
 const GEMINI_CONCURRENCY = 2;
 
-const geminiLimiter = createConcurrencyLimiter(GEMINI_CONCURRENCY);
-
-const sharedLimitedFetch: typeof fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-  geminiLimiter(() => fetch(input, init))) as typeof fetch;
+const sharedLimitedFetch = createLimitedFetch(GEMINI_CONCURRENCY);
 
 export function buildGeminiConfig(env: Pick<Env, "GEMINI_API_KEY" | "GEMINI_MODEL">): GeminiClientConfig {
   return {
