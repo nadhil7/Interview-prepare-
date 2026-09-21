@@ -103,6 +103,56 @@ describe("generateKit", () => {
     expect(result.researchPages.length).toBeGreaterThan(0);
   });
 
+  it("succeeds (does not throw) when the company site is reachable but yields zero usable pages, recording the gap honestly instead of failing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("generativelanguage.googleapis.com")) {
+          const body = JSON.parse((init!.body as string) ?? "{}");
+          const sys: string = body.systemInstruction.parts[0].text;
+          const prompt: string = body.contents[0].parts[0].text;
+
+          if (sys.includes("extract job requirements")) {
+            return geminiTextResponse({ requirements: [{ text: "5+ years with React", kind: "technical", priority: "must" }] });
+          }
+          if (sys.includes("company brief")) {
+            // shouldn't be reached at all — zero pages skips the LLM call
+            throw new Error("company brief should not be called with zero research pages");
+          }
+          if (sys.includes("interview questions for the")) {
+            const idMatch = prompt.match(/\[r\d+\]/);
+            const reqId = idMatch ? idMatch[0].slice(1, -1) : undefined;
+            return geminiTextResponse({
+              questions: reqId ? [{ requirement_ids: [reqId], prompt: "q", answer_outline: "a", difficulty: 2 }] : [],
+            });
+          }
+          if (sys.includes("flashcards")) {
+            return geminiTextResponse({ flashcards: [] });
+          }
+          return geminiTextResponse({});
+        }
+        // every page on the "company site" 404s, including the homepage itself
+        return jsonResponse({}, false, 404);
+      }),
+    );
+
+    const result = await generateKit(BASE_INPUT, {
+      geminiConfig: { apiKey: "key" },
+      urlValidatorOptions: { blockPrivateNetworks: false },
+    });
+
+    // no throw, still a valid, complete kit
+    expect(validateKit(result.kit).ok).toBe(true);
+    expect(result.researchPages).toEqual([]);
+    expect(result.kit.source.pages_used).toEqual([]);
+    // the gap is recorded honestly, not papered over with invented content
+    expect(result.kit.company_brief.summary.toLowerCase()).toMatch(/did not find|unknown|limited/);
+    expect(result.kit.company_brief.sources).toEqual([]);
+    // the JD-derived side of the kit is entirely unaffected by the company site being down
+    expect(result.kit.role.requirements.length).toBeGreaterThan(0);
+  });
+
   it("throws PipelineError with COMPANY_UNREACHABLE when the URL is blocked, before any generation happens", async () => {
     const fetchImpl = vi.fn();
 

@@ -140,6 +140,51 @@ describe("evaluate", () => {
     expect(good.kit).not.toBeNull();
   });
 
+  it("records status 'ok' (not 'failed') when the company site is reachable but yields zero usable pages", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("generativelanguage.googleapis.com")) {
+          const body = JSON.parse((init!.body as string) ?? "{}");
+          const sys: string = body.systemInstruction.parts[0].text;
+          const prompt: string = body.contents[0].parts[0].text;
+          if (sys.includes("extract job requirements")) {
+            return geminiTextResponse({ requirements: [{ text: "5+ years with React", kind: "technical", priority: "must" }] });
+          }
+          if (sys.includes("interview questions for the")) {
+            const idMatch = prompt.match(/\[r\d+\]/);
+            const reqId = idMatch ? idMatch[0].slice(1, -1) : undefined;
+            return geminiTextResponse({ questions: reqId ? [{ requirement_ids: [reqId], prompt: "q", answer_outline: "a", difficulty: 2 }] : [] });
+          }
+          return geminiTextResponse({ flashcards: [] });
+        }
+        // the company site is reachable but every page 404s — a real but
+        // fruitless research attempt, not a broken URL
+        return jsonResponse({}, false, 404);
+      }),
+    );
+
+    const { inputPath, outputPath } = await writeInput([
+      {
+        id: "case-thin-research",
+        jd: "Senior Backend Engineer\n\nRequired: 5+ years with React.",
+        company_url: "https://deadsite.example/",
+        days: 3,
+      },
+    ]);
+
+    await evaluate(inputPath, outputPath, 1);
+
+    const output = JSON.parse(await readFile(outputPath, "utf-8"));
+    const result = output.kits[0];
+    expect(result.status).toBe("ok");
+    expect(result.error).toBeNull();
+    expect(result.kit.source.pages_used).toEqual([]);
+    expect(result.kit.company_brief.summary.toLowerCase()).toMatch(/did not find|unknown|limited/);
+    expect(validateKit(result.kit).ok).toBe(true);
+  });
+
   it("records a malformed case as INVALID_INPUT rather than crashing the whole run", async () => {
     stubGlobalFetch();
     const { inputPath, outputPath } = await writeInput([
