@@ -14,11 +14,11 @@ plain, testable code with the LLM used only where it actually adds value.
 
 ## Where things stand
 
-Phases 1 through 6 are done: the data model, the retrieval/crawling layer, the generation pipeline,
-coverage checking and scheduling, the backend API with job orchestration, and a CLI for batch runs.
-The frontend is currently a placeholder page — the real UI (Phase 7) and deployment (Phase 8)
-haven't been built yet. Everything described below reflects what's actually implemented and
-tested, not what's planned.
+Phases 1 through 7 are done: the data model, the retrieval/crawling layer, the generation pipeline,
+coverage checking and scheduling, the backend API with job orchestration, a CLI for batch runs, and
+the frontend (auth, create-kit form with batch upload, progress view, an inline-editable builder,
+practice mode, and a weak-spots view). Deployment (Phase 8) hasn't happened yet. Everything
+described below reflects what's actually implemented and tested, not what's planned.
 
 ## Stack, and why
 
@@ -26,7 +26,10 @@ tested, not what's planned.
   the exact same types and functions get reused instead of re-implemented three times.
 - **Node.js + Express** for the backend. Nothing fancy is needed here — it's mostly job
   orchestration and a handful of REST endpoints.
-- **Next.js (App Router) + Tailwind** for the frontend, once it's built. Not evaluated yet.
+- **Next.js (App Router) + Tailwind** for the frontend. Plain `fetch` against the backend, no
+  separate data-fetching library — the app's needs (a kits list, one kit at a time, a handful of
+  mutations) didn't justify one. Reordering questions/flashcards uses up/down buttons rather than
+  drag-and-drop, which gets keyboard navigation for free instead of needing extra work to add it.
 - **MongoDB / Mongoose.** The kit structure is naturally document-shaped (nested arrays of
   requirements, questions, flashcards) — forcing that into relational tables would have meant a
   lot of joins for no real benefit.
@@ -129,6 +132,41 @@ gap-fill loop — if the one fresh LLM call leaves a must-have requirement uncov
 regeneration is rejected before anything is saved, rather than risking a half-broken kit. The user
 just tries again.
 
+## The frontend, and what it needed from the backend
+
+The builder view's inline editing (add/edit/delete/reorder/pin a question or flashcard, move a
+question between categories, edit the company brief) needed mutation endpoints that didn't exist
+before Phase 7 — the only thing that touched kit content before this was full-section
+regeneration. `backend/src/orchestration/edit-kit.ts` follows the exact same load → mutate →
+recompute schedule/coverage → validate → persist pattern `regenerate-section.ts` already used, so
+every question-array edit stays in sync with the schedule and coverage the same way a regeneration
+does — reusing `allocateSchedule` and `findUncoveredRequirementIds` from the pipeline, not a new
+implementation of either. A hand-added question or flashcard is created with `status: "edited"`,
+never `"pristine"` — a pristine, generated item is exactly what a later category regeneration
+wipes, so a user-authored one defaulting to pristine would get silently deleted the next time
+someone regenerated that category. Caught that while writing the create endpoint, not after.
+
+Auth needed a `GET /api/auth/me` endpoint that also didn't exist. The backend's session cookie is
+httpOnly, and the frontend runs on a different origin (a different port in dev, a different domain
+entirely once deployed) — there's no way for client code to read that cookie directly to check
+"am I logged in." Reading it via Next.js middleware would only coincidentally work in local dev,
+since cookies aren't port-scoped, so a cookie set by `localhost:4000` happens to be visible to
+`localhost:3000` too. That wouldn't survive deployment across real domains. A credentialed fetch to
+`/api/auth/me` works in both.
+
+Practice mode needed somewhere to persist a confidence rating and a seen flag per flashcard — two
+new fields on the flashcard schema (`confidence: 1 | 2 | 3 | null`, `seen: boolean`), additive like
+`origin`/`status`, so `validateKit` stays a strict superset of the graded structure.
+
+Batch upload accepts a JSON file shaped exactly like the CLI's `cases.json`
+(`[{jd, company_url, days}]`) rather than inventing a second format, and just calls the same
+`POST /api/kits` once per entry — no new batch endpoint needed.
+
+Next.js reads env files from `frontend/`, not the repo root — the same class of mistake fixed
+earlier for the backend (`npm run --workspace` changing the working directory). `NEXT_PUBLIC_API_BASE_URL`
+defaults to `http://localhost:4000` in code, so local dev needs no frontend env file at all; copy
+`frontend/.env.local.example` to `frontend/.env.local` only to point at a different backend.
+
 ## Batch evaluation
 
 ```
@@ -167,11 +205,16 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
-`npm test` runs the test suites for every workspace — 165+ tests as of Phase 6, covering the SSRF
+`npm test` runs the test suites for every workspace — 180+ tests as of Phase 7, covering the SSRF
 guard, link ranking, robots.txt parsing, the coverage checker and schedule allocator, requirement
 extraction (including the fallback path), the full generation pipeline end-to-end against a mocked
-LLM, the backend's job state machine, section regeneration and its pin-safety guarantees, and the
-CLI's batch behavior including the ok-vs-failed boundary described above.
+LLM, the backend's job state machine, section regeneration and its pin-safety guarantees, the kit
+content editing endpoints (including the must-requirement-coverage rejection path), and the CLI's
+batch behavior including the ok-vs-failed boundary described above. The frontend has no separate
+test suite — it's a thin layer over an already-tested API, and every endpoint it calls was
+exercised directly (register → create a kit → edit/add/delete/reorder/pin questions and
+flashcards → edit the brief → record practice ratings) against the real running backend while
+building it, not just type-checked.
 
 ## A few known rough edges
 
@@ -186,5 +229,12 @@ CLI's batch behavior including the ok-vs-failed boundary described above.
 - Section regeneration checks coverage but doesn't re-run the gap-fill loop if the fresh content
   leaves something uncovered — it just rejects the regeneration outright. Simple and safe, but it
   means an occasional regenerate click needs a retry.
-- The frontend is a single placeholder page right now. No auth UI, no builder view, no practice
-  mode yet — that's Phase 7.
+- The frontend has no automated tests of its own (see above) and wasn't visually verified in a
+  real browser — there's no browser-automation tool available in this environment. Every API call
+  it makes was proven to work against the real backend directly, and it type-checks and builds
+  cleanly, but rendering, layout, and interactivity haven't been eyeballed. Worth a manual pass
+  before relying on it.
+- The weak-spots view only looks at cards rated low confidence *during that session* — it doesn't
+  remember low ratings from a previous practice session once you've navigated away. A second
+  session starts fresh on that front (though card ordering still uses the persisted confidence
+  from last time, so genuinely weak cards keep surfacing first).
