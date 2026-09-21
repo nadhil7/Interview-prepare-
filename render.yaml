@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ai-interview-prep-kit-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build --workspace=pipeline && npm run build --workspace=backend
+    startCommand: npm run start --workspace=backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

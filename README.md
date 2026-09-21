@@ -44,6 +44,25 @@ described below reflects what's actually implemented and tested, not what's plan
   and the web app have to use the *exact same* generation logic, so that logic lives in one place
   neither of them owns.
 
+## Architecture
+
+```
+repo/
+├── pipeline/   shared retrieval, generation, coverage, schedule, and the Zod kit schema
+├── backend/    Express API — auth, job orchestration, kit content editing
+├── frontend/   Next.js UI
+├── cli/        batch evaluation entry point
+└── tests/      co-located *.test.ts files next to what they test, in each package
+```
+
+`pipeline` is the only place that knows how to build a kit or what one looks like. `backend` and
+`cli` both depend on it and never reimplement any of that logic — `backend/src/orchestration/
+generate-kit.ts` and `cli/src/index.ts` both call `pipeline`'s `generateKit()` directly.
+`frontend` depends on `pipeline` too, but only for its TypeScript types (`Kit`, `Question`,
+`Flashcard`, `QuestionCategory`) — a type-only import, so none of `pipeline`'s runtime code
+(cheerio, the Gemini client, zod) ends up in the browser bundle. `frontend` never talks to
+`pipeline` or MongoDB directly; everything goes through `backend`'s REST API.
+
 ## How a kit actually gets built
 
 `pipeline/src/orchestrator/generate-kit.ts` is the whole sequence, and it's the one function both
@@ -132,6 +151,21 @@ gap-fill loop — if the one fresh LLM call leaves a must-have requirement uncov
 regeneration is rejected before anything is saved, rather than risking a half-broken kit. The user
 just tries again.
 
+## The creative feature: weak spots
+
+After a practice session, the practice page shows a "study this next" view combining two things
+that are otherwise easy to lose track of separately: flashcards rated low confidence *during that
+session*, and any nice-priority requirement that still has zero questions covering it
+(`coverage.uncovered_requirement_ids`, cross-referenced against `role.requirements` by priority).
+The idea: a prep kit can look complete — every must-have covered, a full flashcard deck — while
+still hiding two different kinds of gap that only show up from different angles. One is "I have
+material on this but don't actually know it yet," which only surfacing after a practice session
+can catch. The other is "nothing was ever generated for this at all," which coverage tracking
+already knows about but which otherwise just sits quietly in a field nobody looks at. Putting both
+in one place after a session, rather than requiring someone to separately dig through practice
+history and a coverage report, is the actual point of the feature. It's computed entirely
+client-side from data the API already returns — no new backend field, no separate endpoint.
+
 ## The frontend, and what it needed from the backend
 
 The builder view's inline editing (add/edit/delete/reorder/pin a question or flashcard, move a
@@ -215,6 +249,57 @@ test suite — it's a thin layer over an already-tested API, and every endpoint 
 exercised directly (register → create a kit → edit/add/delete/reorder/pin questions and
 flashcards → edit the brief → record practice ratings) against the real running backend while
 building it, not just type-checked.
+
+## Environment variables
+
+**Backend** (`.env` at the repo root — `cp .env.example .env`):
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGODB_URI` | yes | Mongo connection string. Local (`mongodb://localhost:27017/...`) for dev, an Atlas URI in production. |
+| `JWT_SECRET` | yes | Signs the auth cookie. **Generate a real random string for production** (e.g. `openssl rand -hex 32`) — the value in `.env.example` is a local-dev placeholder only, never use it deployed. |
+| `GEMINI_API_KEY` | no | Google Gemini API key. Missing entirely is a supported state — every generation step has a heuristic fallback (see above) — not an error. |
+| `GEMINI_MODEL` | no | Defaults to `gemini-2.5-flash`. Override here if that model id is ever retired/renamed without touching code. |
+| `NODE_ENV` | no | `development` locally, `production` when deployed. Also switches on SSRF protection (`blockPrivateNetworks`) for the crawler — deploy with this set, or every company URL, including internal/private ones, gets crawled unchecked. |
+| `PORT` | no | Defaults to `4000`. Most PaaS providers (Render included) inject their own `PORT` and expect the app to read it — this already does. |
+
+**Frontend** (`frontend/.env.local` — `cp frontend/.env.local.example frontend/.env.local`, only
+needed to override the default):
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | no | Defaults to `http://localhost:4000`. Set to the deployed backend's public URL once one exists — this is a build-time public var (the `NEXT_PUBLIC_` prefix), so it has to be set before/during the Vercel build, not just at runtime. |
+
+**CLI** reads `GEMINI_API_KEY` and `GEMINI_MODEL` from the same root `.env` as the backend — no
+CLI-specific variables.
+
+## Deployment
+
+Frontend on Vercel, backend on Render — both need their own step, since this is a monorepo and
+neither platform auto-detects a two-workspace deploy on its own.
+
+**Backend (Render):** a `render.yaml` at the repo root defines the service — build command
+`npm install && npm run build --workspace=pipeline && npm run build --workspace=backend`, start
+command `npm run start --workspace=backend`, run from the repo root (not `backend/`) since npm
+workspace commands need to see the root `package.json`. Import the
+repo in the Render dashboard, it should pick up `render.yaml` automatically; otherwise create a
+Web Service manually with those same settings. Set `MONGODB_URI` (an Atlas connection string —
+Render's own free Postgres doesn't help here, this app uses Mongo), `JWT_SECRET` (a real generated
+one, not the `.env.example` placeholder), and `GEMINI_API_KEY` as environment variables in the
+Render dashboard; leave `NODE_ENV=production` (set in `render.yaml`) and `PORT` (Render injects its
+own) alone.
+
+**Frontend (Vercel):** import the same repo, set the project's **Root Directory** to `frontend` in
+the Vercel dashboard's project settings (this is the one manual step Vercel needs for a monorepo —
+everything else about a Next.js app is auto-detected). Set `NEXT_PUBLIC_API_BASE_URL` to the
+Render backend's public URL as a Vercel environment variable before the first build.
+
+**After both are deployed:** confirm each is independently reachable — the backend's `/health`
+endpoint and the frontend's root page should both load without the other being involved. Then log
+in through the deployed frontend once to confirm the cross-origin cookie flow actually works
+end to end (CORS is already configured with `credentials: true` and a reflected origin on the
+backend, so this should just work, but it's the one thing that's genuinely different between local
+dev, where both run on `localhost`, and production, where they're on entirely different domains).
 
 ## A few known rough edges
 
