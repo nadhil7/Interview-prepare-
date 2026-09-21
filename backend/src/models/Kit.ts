@@ -47,6 +47,8 @@ const flashcardSchema = new Schema(
     requirement_ids: { type: [String], default: [] },
     origin: { type: String, enum: ["generated", "user"], default: "generated" },
     status: { type: String, enum: ["pristine", "edited", "pinned"], default: "pristine" },
+    confidence: { type: Number, enum: [1, 2, 3], default: null },
+    seen: { type: Boolean, default: false },
   },
   { _id: false },
 );

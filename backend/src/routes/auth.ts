@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { User } from "../models/User.js";
-import { AUTH_COOKIE_NAME, signAuthToken } from "../middleware/auth.js";
+import { AUTH_COOKIE_NAME, requireAuth, signAuthToken, type AuthedRequest } from "../middleware/auth.js";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -74,6 +74,15 @@ export function createAuthRouter(jwtSecret: string): Router {
   router.post("/logout", (_req, res) => {
     res.clearCookie(AUTH_COOKIE_NAME);
     res.status(204).send();
+  });
+
+  router.get("/me", requireAuth(jwtSecret), async (req: AuthedRequest, res) => {
+    const user = await User.findById(req.userId).lean();
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    res.status(200).json({ id: user._id.toString(), email: user.email });
   });
 
   return router;

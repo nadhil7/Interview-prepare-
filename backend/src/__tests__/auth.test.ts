@@ -47,6 +47,17 @@ describe("auth flow", () => {
     expect(res.body).toEqual({ error: "unauthenticated" });
   });
 
+  it("GET /api/auth/me returns the current user when logged in, 401 when not", async () => {
+    const agent = request.agent(app);
+    const meBefore = await agent.get("/api/auth/me");
+    expect(meBefore.status).toBe(401);
+
+    await agent.post("/api/auth/register").send({ email: "me-check@example.com", password: "correct-horse" });
+    const meAfter = await agent.get("/api/auth/me");
+    expect(meAfter.status).toBe(200);
+    expect(meAfter.body.email).toBe("me-check@example.com");
+  });
+
   it("rejects login with wrong password", async () => {
     await request(app)
       .post("/api/auth/register")
