@@ -1,12 +1,14 @@
 import { Schema, model } from "mongoose";
 
 /**
- * Mirrors the Kit contract in `pipeline/src/schema/kit.ts` field-for-field, plus
- * orchestration bookkeeping (`job`, `requestHash`) and per-item edit-tracking
- * (`origin`, `status`) that the Zod schema also allows additively.
+ * matches the kit contract in pipeline/src/schema/kit.ts field by field,
+ * plus job status and request hash for tracking a job, and origin and
+ * status on each item for tracking edits, which the zod schema also
+ * allows since it is additive.
  *
- * Keep this in sync with the Zod schema by hand — the round-trip test in
- * `src/__tests__/kit-mongoose-zod.test.ts` catches drift between the two.
+ * this needs to be kept in sync with the zod schema by hand. the round
+ * trip test in src/__tests__/kit-mongoose-zod.test.ts will catch it if
+ * the two drift apart.
  */
 
 const requirementSchema = new Schema(
@@ -65,12 +67,11 @@ const kitSchema = new Schema(
     requestHash: { type: String, index: true },
 
     /**
-     * Raw research inputs the LLM calls were grounded in, kept around so
-     * section regeneration (brief, a question category) reuses the same
-     * retrieved material rather than re-crawling the company site or
-     * re-running the discussion search on every regenerate click. Additive
-     * — not part of the strict kit contract, stripped by validateKit's
-     * non-strict parsing.
+     * the raw research the llm calls were based on, kept around so
+     * regenerating a section, the brief or a question category, reuses
+     * the same material instead of crawling the company site or running
+     * the search again every time. this is extra, not part of the strict
+     * kit contract, and gets stripped out by validateKit automatically.
      */
     research: {
       pages: { type: [{ url: String, text: String }], default: [] },

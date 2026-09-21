@@ -8,7 +8,7 @@ export interface ScheduleResult {
   days: ScheduleDay[];
 }
 
-/** Fixed difficulty -> minutes mapping, integers only, per the contract. */
+/** fixed table mapping difficulty to minutes, whole numbers only, matching the contract. */
 const DIFFICULTY_MINUTES: Record<number, number> = { 1: 20, 2: 35, 3: 50 };
 
 const CATEGORY_LABELS: Record<Question["category"], string> = {
@@ -28,7 +28,7 @@ function priorityRank(question: Question, requirementById: Map<string, Requireme
   return rank;
 }
 
-/** Must-linked requirements outrank nice, higher difficulty breaks ties within the same priority tier. */
+/** a question tied to a must requirement always outranks one tied to a nice one, difficulty breaks ties within the same tier. */
 export function scoreQuestion(question: Question, requirementById: Map<string, Requirement>): number {
   return priorityRank(question, requirementById) * 10 + question.difficulty;
 }
@@ -48,15 +48,15 @@ function focusLabelFor(dayQuestions: Question[]): string {
 }
 
 /**
- * Pure, deterministic — coverage and scheduling are never left to the
- * model. Scores every question (must outranks nice, difficulty breaks
- * ties), sorts descending, then walks the sorted list in contiguous
- * chunks — day 1 gets the first (hardest/highest-priority) chunk, day 2
- * the next, and so on — so harder material clusters into earlier days
- * rather than the night before the interview. Always emits exactly
- * `daysAvailable` day entries (1-60), even with far fewer questions than
- * days, and never drops a question, so any must-requirement's covering
- * question is guaranteed to land somewhere in the schedule.
+ * plain, predictable code. coverage and scheduling are never left to the
+ * model. it scores every question, must outranks nice and difficulty
+ * breaks ties, sorts them highest first, then walks that list in chunks.
+ * day one gets the first and hardest chunk, day two gets the next, and so
+ * on, so harder material lands early rather than the night before the
+ * interview. it always produces exactly as many days as requested, from
+ * one day up to sixty, even when there are far fewer questions than days,
+ * and it never drops a question, so any must requirement's question is
+ * guaranteed a spot somewhere in the schedule.
  */
 export function allocateSchedule(
   questions: Question[],

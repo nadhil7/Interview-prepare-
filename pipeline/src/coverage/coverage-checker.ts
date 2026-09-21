@@ -1,9 +1,9 @@
 import type { Question, Requirement } from "../schema/kit.js";
 
 /**
- * Pure code, no LLM — coverage is a plain set-membership check, never a
- * decision left to the model. Returns the ids of requirements that no
- * question references.
+ * plain code, no llm involved. coverage is just a set check, never a
+ * decision left to the model. returns the ids of requirements that no
+ * question points to.
  */
 export function findUncoveredRequirementIds(requirements: Requirement[], questions: Question[]): string[] {
   const coveredIds = new Set(questions.flatMap((q) => q.requirement_ids));

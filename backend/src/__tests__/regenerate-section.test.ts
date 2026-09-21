@@ -72,7 +72,7 @@ describe("regenerateSection — question category", () => {
     expect(byId.get("q3")).toMatchObject({ prompt: "pinned technical Q", status: "pinned" });
     // other category untouched
     expect(byId.get("q4")).toMatchObject({ prompt: "behavioural Q, untouched category", status: "pristine" });
-    // a freshly generated technical question was added, with a non-colliding id
+    // a freshly generated technical question was added, with an id that does not collide
     const fresh = updated.questions.find((q) => q.prompt === "freshly regenerated technical Q");
     expect(fresh).toBeDefined();
     expect(byId.has(fresh!.id)).toBe(true);

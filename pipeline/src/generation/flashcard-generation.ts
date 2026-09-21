@@ -71,7 +71,7 @@ export async function generateFlashcards(options: GenerateFlashcardsOptions): Pr
   }
 }
 
-/** Deterministic fallback: turns each already-generated question directly into a flashcard. */
+/** plain fallback, turns each question that already exists directly into a flashcard. */
 export function heuristicFlashcards(questions: Question[]): GeneratedFlashcard[] {
   return questions.map((q) => ({
     front: q.prompt,

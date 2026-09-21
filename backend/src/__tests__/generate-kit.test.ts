@@ -43,9 +43,9 @@ describe("findOrCreateKitJob — duplicate-submission handling", () => {
     const userId = new mongoose.Types.ObjectId().toString();
     const { kit } = await findOrCreateKitJob(userId, BASE_INPUT);
 
-    // simulate a crash mid-run: stuck in "researching", last touched long ago.
-    // Bypass Mongoose's automatic timestamps by writing through the raw
-    // driver, since .save()/findOneAndUpdate would refresh updatedAt to now.
+    // simulate a crash mid run, stuck in researching, last touched long ago.
+    // this writes through the raw driver to skip mongoose's automatic
+    // timestamps, since save or findOneAndUpdate would refresh updatedAt to now
     await Kit.collection.updateOne(
       { _id: kit._id },
       { $set: { "job.status": "researching", updatedAt: new Date(Date.now() - 10 * 60 * 1000) } },
@@ -159,9 +159,9 @@ function geminiTextResponse(payload: unknown): Response {
 }
 
 /**
- * One global fetch stub serves crawler/search calls (real HTML) and Gemini
- * calls (dispatched by inspecting the system instruction text), so the
- * whole orchestration runs offline end-to-end.
+ * one global fetch stub handles the crawler and search calls with real
+ * html, and the gemini calls by reading the system instruction text, so
+ * the whole run can happen fully offline.
  */
 function stubGlobalFetch(): void {
   vi.stubGlobal(

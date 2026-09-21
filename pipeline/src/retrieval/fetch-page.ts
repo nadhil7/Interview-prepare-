@@ -19,10 +19,11 @@ const DEFAULT_MAX_BYTES = 2_000_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Fetches one page, enforces content-type (must be HTML) and size caps, and
- * strips boilerplate (nav/header/footer/script/style) before returning clean
- * text plus the outbound links (for the crawler to rank and follow).
- * Returns null on any failure — callers record the skip, they don't throw.
+ * fetches one page, checks the content type is html and stays under the
+ * size cap, then strips the nav, header, footer, script and style tags
+ * before returning clean text and the outbound links for the crawler to
+ * follow. returns null on any failure instead of throwing, so the caller
+ * can just record it and move on.
  */
 export async function fetchPage(url: string, options: FetchPageOptions): Promise<FetchedPage | null> {
   const fetchImpl = options.fetchImpl ?? fetch;

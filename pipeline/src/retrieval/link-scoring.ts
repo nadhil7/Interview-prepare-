@@ -36,9 +36,9 @@ function haystackFor(link: LinkCandidate): string {
 }
 
 /**
- * Higher score = stronger signal the link leads to hiring-process or
- * about-the-company content worth crawling. Pure function, no I/O — the
- * crawler is the only thing that decides what to do with the ranking.
+ * higher score means the link is more likely to lead to hiring or
+ * about the company content worth crawling. this is a pure function with
+ * no side effects, the crawler decides what to actually do with the score.
  */
 export function scoreLink(link: LinkCandidate): number {
   const haystack = haystackFor(link);
@@ -55,7 +55,7 @@ export function rankLinks(links: LinkCandidate[]): ScoredLink[] {
     .sort((a, b) => b.score - a.score);
 }
 
-/** Used by the crawler to decide whether a page is worth a second hop from. */
+/** used by the crawler to decide whether a page is worth a second hop from. */
 export function isHiringLikePage(link: LinkCandidate): boolean {
   const haystack = haystackFor(link);
   return (

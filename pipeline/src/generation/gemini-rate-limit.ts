@@ -1,13 +1,13 @@
 import { createConcurrencyLimiter } from "../retrieval/rate-limit.js";
 
 /**
- * Wraps `fetch` itself with a concurrency limiter, so every pipeline call
- * that's given the resulting function as its GeminiClientConfig.fetchImpl
- * shares one cap on in-flight Gemini requests — a kit's 4-category fan-out,
- * and (whoever calls this) every concurrently-running kit/case in that
- * process. Each process (backend server, CLI run) creates its own instance;
- * they can't share a limiter across process boundaries, which is fine —
- * each just needs its own cap on its own free-tier usage.
+ * wraps fetch itself with a limit on how many calls run at once, so every
+ * pipeline call using the result as its fetchImpl shares one cap on gemini
+ * requests in flight. that covers a kit's four question categories running
+ * together, and every kit or batch case running in the same process. each
+ * process, the backend server or a cli run, makes its own instance since a
+ * limit can't be shared across processes. that's fine, each one only needs
+ * to watch its own share of the free tier.
  */
 export function createLimitedFetch(maxConcurrent: number): typeof fetch {
   const limiter = createConcurrencyLimiter(maxConcurrent);

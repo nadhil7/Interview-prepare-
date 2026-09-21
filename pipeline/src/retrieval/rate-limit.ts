@@ -1,8 +1,8 @@
 export type Task<T> = () => Promise<T>;
 
 /**
- * Bounded-concurrency runner. Returns a `run` function: call it with a task,
- * it queues the task if `maxConcurrent` are already in flight.
+ * limits how many tasks run at the same time. returns a run function, call
+ * it with a task and it queues the task if too many are already running.
  */
 export function createConcurrencyLimiter(maxConcurrent: number) {
   let active = 0;
@@ -32,7 +32,7 @@ export function createConcurrencyLimiter(maxConcurrent: number) {
   };
 }
 
-/** Full-jitter exponential backoff, capped at `maxMs`. */
+/** picks a random wait time that grows with each attempt, capped at maxMs. */
 export function backoffDelayMs(attempt: number, baseMs = 300, maxMs = 8000): number {
   const cap = Math.min(maxMs, baseMs * 2 ** attempt);
   return Math.random() * cap;
@@ -48,7 +48,7 @@ export interface RetryOptions {
   maxMs?: number;
 }
 
-/** Retries `task` with exponential backoff + jitter; rethrows the last error. */
+/** retries a task with a growing wait between tries, then throws the last error. */
 export async function withRetry<T>(task: Task<T>, options: RetryOptions): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= options.retries; attempt++) {

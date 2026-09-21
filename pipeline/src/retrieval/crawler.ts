@@ -48,12 +48,12 @@ function safeHostname(url: string): string | null {
 }
 
 /**
- * BFS from the company's homepage, following links (not a fixed path list).
- * The homepage always expands to hop 1. Beyond that, only pages that look
- * like hiring/about content (per `isHiringLikePage`) expand further, so a
- * homepage can still reach hiring content buried a second hop deep without
- * the crawler wandering into unrelated site sections. Capped at `maxPages`
- * total fetches and `MAX_HOP_DEPTH` hops.
+ * walks outward from the company's homepage, following the actual links on
+ * each page instead of a fixed list of paths. the homepage always expands
+ * to the first hop. after that, only pages that look like hiring or about
+ * content expand further, so the crawler can still reach hiring content
+ * buried two hops deep without wandering into unrelated parts of the site.
+ * capped on total pages fetched and how many hops deep it will go.
  */
 export async function crawlCompanySite(startUrl: string, options: CrawlOptions): Promise<CrawlResult> {
   const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;

@@ -159,8 +159,8 @@ describe("evaluate", () => {
           }
           return geminiTextResponse({ flashcards: [] });
         }
-        // the company site is reachable but every page 404s — a real but
-        // fruitless research attempt, not a broken URL
+        // the company site is reachable but every page 404s, so this is a
+        // real but fruitless research attempt, not a broken url
         return jsonResponse({}, false, 404);
       }),
     );

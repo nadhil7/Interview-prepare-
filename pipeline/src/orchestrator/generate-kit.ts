@@ -29,11 +29,12 @@ export interface GenerateKitDeps {
 export type GenerateKitStage = "researching" | "generating" | "checking";
 
 /**
- * Fired as the pipeline moves through non-terminal stages, with whatever
- * partial data became available at that point — the backend uses this to
- * persist job.status/progress (and early source/role/research data) so a
- * poll endpoint reflects real progress; the CLI ignores it entirely (no
- * per-case progress reporting needed for a batch run).
+ * fired as the pipeline moves through each stage that is not the final
+ * one, along with whatever partial data became available at that point.
+ * the backend uses this to save job status and progress, plus early
+ * source, role and research data, so a poll endpoint shows real progress.
+ * the cli ignores it completely since a batch run has no need to report
+ * progress per case.
  */
 export type GenerateKitProgressCallback = (
   stage: GenerateKitStage,
@@ -47,15 +48,15 @@ export interface GenerateKitResult {
 }
 
 /**
- * The single orchestration function both the backend's background job and
- * the CLI's batch evaluator call — the brief requires this explicitly ("use
- * the same pipeline function the web app uses, no parallel implementation").
- * Runs retrieval -> extraction/generation -> coverage -> schedule, validates
- * the result, and returns it; throws PipelineError on any failure a caller
- * should treat as "this kit could not be produced at all" (an unreachable
- * company site, or a final structure that fails validateKit). A thin/absent
- * research result is NOT a failure here — that's recorded honestly inside
- * the kit (see company-brief.ts, search.ts) and still produces an "ok" kit.
+ * this is the one function both the backend's background job and the
+ * cli's batch runner call to build a kit, so the same logic is used
+ * everywhere instead of being written twice. it runs retrieval, then
+ * extraction and generation, then coverage, then the schedule, checks the
+ * result, and returns it. it throws PipelineError only when a kit could
+ * not be produced at all, such as an unreachable company site or a final
+ * result that fails validation. a thin or missing research result is not
+ * treated as a failure here, that gets recorded honestly inside the kit
+ * itself and still counts as a working result.
  */
 export async function generateKit(
   input: GenerateKitInput,

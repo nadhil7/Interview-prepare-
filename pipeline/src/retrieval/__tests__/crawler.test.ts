@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { crawlCompanySite } from "../crawler.js";
 
 /**
- * Fake site graph:
- *   / (home)          -> /pricing (generic), /careers (hiring-like), /about (hiring-like)
- *   /careers          -> /careers/interview-process   (only reachable via a 2nd hop)
- *   /about            -> /about/team                   (only reachable via a 2nd hop)
- *   /pricing          -> /pricing/details               (should NOT be reached — pricing isn't hiring-like)
- * Verifies: homepage always expands to hop 1; only hiring/about-like hop-1
- * pages expand to hop 2; a non-hiring hop-1 page does not.
+ * fake site graph:
+ *   / (home)   goes to /pricing (generic), /careers (looks like hiring), /about (looks like hiring)
+ *   /careers   goes to /careers/interview-process, only reachable through a second hop
+ *   /about     goes to /about/team, only reachable through a second hop
+ *   /pricing   goes to /pricing/details, which should not be reached since pricing does not look like hiring
+ * checks that the homepage always expands to the first hop, only pages
+ * that look like hiring or about content expand to the second hop, and a
+ * page from the first hop that does not look like hiring does not expand.
  */
 const PAGES: Record<string, string> = {
   "https://acme.example/": html("Acme", [

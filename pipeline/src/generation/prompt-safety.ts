@@ -4,10 +4,10 @@ export interface UntrustedBlock {
 }
 
 /**
- * Every prompt that includes fetched page text or pasted JD content must
- * delimit it with this wrapper and pair it with UNTRUSTED_DATA_WARNING in
- * the system instruction — so untrusted content can never be mistaken for
- * instructions to the model.
+ * every prompt that includes fetched page text or a pasted job description
+ * should wrap it with this function and pair it with untrusted_data_warning
+ * in the system instruction, so that content never gets mistaken for
+ * instructions by the model.
  */
 export function wrapUntrustedContent(blocks: UntrustedBlock[]): string {
   return blocks

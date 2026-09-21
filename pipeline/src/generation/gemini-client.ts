@@ -3,10 +3,10 @@ import { backoffDelayMs } from "../retrieval/rate-limit.js";
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-/** Thrown when Gemini could not produce a usable result even after retries, or no key is configured. Callers catch this and fall back to a deterministic heuristic. */
+/** thrown when gemini could not produce a usable result even after retries, or no key is set. callers catch this and fall back to a plain heuristic. */
 export class GeminiUnavailableError extends Error {}
 
-/** Internal: signals a retriable failure (rate limit, server error, invalid/unparseable JSON). Never escapes generateJson(). */
+/** internal only, marks a failure worth retrying such as a rate limit, server error, or bad json. never leaves generateJson. */
 class RetriableGeminiError extends Error {}
 
 export interface GeminiClientConfig {
@@ -71,13 +71,12 @@ async function callGeminiOnce(
 }
 
 /**
- * Calls Gemini and returns parsed+validated JSON. Retries on rate limits
- * (429), server errors (5xx), invalid/unparseable JSON, and schema
- * validation failures, with exponential backoff+jitter (reusing
- * retrieval/rate-limit.ts's backoffDelayMs rather than a second copy of
- * that logic). Any other failure — including no API key at all — throws
- * GeminiUnavailableError, which callers catch to run their deterministic
- * heuristic fallback instead.
+ * calls gemini and returns parsed, validated json. retries on rate limits,
+ * server errors, bad json, and schema failures, waiting a bit longer each
+ * time it reuses the same wait helper from the rate limit file instead of
+ * writing that logic twice. any other failure, including having no api key
+ * at all, throws GeminiUnavailableError, which callers catch to run their
+ * own plain heuristic instead.
  */
 export async function generateJson<T>(
   config: GeminiClientConfig,

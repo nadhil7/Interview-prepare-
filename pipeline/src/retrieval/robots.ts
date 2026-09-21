@@ -3,9 +3,9 @@ export interface RobotsRules {
 }
 
 /**
- * Minimal robots.txt parser: finds the group matching our user agent
- * (falling back to "*"), collects its Disallow paths. Allow rules and
- * crawl-delay are out of scope for this assessment.
+ * a small robots.txt reader. it finds the group that matches our user
+ * agent, or falls back to the wildcard group, and collects its disallow
+ * paths. allow rules and crawl delay settings are not handled here.
  */
 export function parseRobotsTxt(content: string, userAgent: string): RobotsRules {
   const lines = content.split(/\r?\n/).map((l) => l.replace(/#.*/, "").trim());
@@ -57,8 +57,8 @@ export async function fetchRobotsRules(
     const text = await res.text();
     return parseRobotsTxt(text, userAgent);
   } catch {
-    // robots.txt unreachable: fail open (no restrictions), matching common
-    // crawler behavior — an unreachable robots.txt is not itself a disallow.
+    // if robots.txt can't be reached, allow everything by default. that
+    // matches how most crawlers behave, since a missing file isn't a rule.
     return { disallowedPaths: [] };
   }
 }

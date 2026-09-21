@@ -1,7 +1,7 @@
 /**
- * Cheap, deterministic heuristics — not worth a Gemini call. If they guess
- * wrong the user (or a batch case reviewer) can just edit the field; this
- * only seeds a reasonable starting point.
+ * cheap, plain guesses that are not worth a gemini call. if they guess
+ * wrong the user, or whoever is reviewing a batch case, can just edit the
+ * field. this only gives a reasonable starting point.
  */
 export function deriveCompanyNameFromUrl(companyUrl: string): string {
   try {

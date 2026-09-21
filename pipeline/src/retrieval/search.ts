@@ -9,7 +9,7 @@ export interface DiscussionResult {
 export interface DiscussionSearchOutcome {
   found: boolean;
   results: DiscussionResult[];
-  /** Honest note for when nothing turned up or the search itself failed — never fabricate content instead. */
+  /** a plain note for when nothing turned up or the search itself failed, instead of making something up. */
   note?: string;
 }
 
@@ -19,11 +19,11 @@ export interface SearchOptions {
 }
 
 /**
- * Searches DuckDuckGo's keyless HTML endpoint for public discussion of a
- * company's interview process. No API key required, which matches the
- * free-tier constraint the rest of this project runs under. If nothing
- * useful turns up (or the request fails), that's recorded honestly in
- * `note` rather than fabricated — callers must not invent content here.
+ * searches duckduckgo's plain html page for public discussion of a
+ * company's interview process. no api key needed, which fits the free
+ * tier the rest of this project runs on. if nothing useful turns up, or
+ * the request fails, that gets written into note honestly instead of
+ * making something up.
  */
 export async function searchPublicInterviewDiscussion(
   companyName: string,

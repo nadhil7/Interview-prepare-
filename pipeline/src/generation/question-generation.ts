@@ -93,7 +93,7 @@ export async function generateQuestionsForCategory(
   }
 }
 
-/** Deterministic fallback: templated questions built from requirement text actually present in the JD. */
+/** plain fallback, builds templated questions from requirement text that is actually in the job description. */
 export function heuristicQuestionsForCategory(
   category: QuestionCategory,
   requirements: Requirement[],
@@ -120,10 +120,10 @@ export function heuristicQuestionsForCategory(
 }
 
 /**
- * Which requirements feed which category's LLM call. Exported so callers
- * that regenerate a single category later (e.g. the backend's section
- * regeneration endpoint) route the same requirements into it that the
- * initial full-bank generation did — one mapping, not a second copy of it.
+ * decides which requirements feed which category's llm call. exported so
+ * other code that regenerates a single category later, such as the
+ * backend's section regeneration route, sends it the same requirements the
+ * first full generation did. one shared mapping, not a second copy of it.
  */
 export function getCategoryRequirements(category: QuestionCategory, requirements: Requirement[]): Requirement[] {
   switch (category) {
@@ -147,11 +147,11 @@ export interface GenerateQuestionBankOptions {
 const ALL_CATEGORIES: QuestionCategory[] = ["technical", "behavioural", "system-design", "company-fit"];
 
 /**
- * Four separate LLM calls, one per category — never one call asked to
- * produce everything. Each call only sees the requirements relevant to its
- * category, so what gets generated visibly shifts with what was actually
- * extracted/researched (e.g. no behavioural requirements -> a generic
- * behavioural fallback question, not padded technical content).
+ * makes four separate llm calls, one per category, never one call asked to
+ * produce everything at once. each call only sees the requirements that
+ * matter for its own category, so what gets generated actually shifts with
+ * what was found. for example no behavioural requirements means a generic
+ * behavioural fallback question shows up instead of padded technical ones.
  */
 export async function generateQuestionBank(options: GenerateQuestionBankOptions): Promise<GeneratedQuestion[]> {
   const shared = {

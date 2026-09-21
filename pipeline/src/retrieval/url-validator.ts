@@ -2,12 +2,11 @@ import { promises as dns } from "node:dns";
 import { isIPv4, isIPv6 } from "node:net";
 
 /**
- * SSRF guard. `blockPrivateNetworks` is a plain boolean the caller decides,
- * not something this module reads from env itself — keeps this pure/testable.
- * Backend defaults it to `NODE_ENV === "production"`; the CLI defaults it to
- * false so batch evaluation can target the local fixture company sites the
- * grading harness serves (per the brief: "retrieval code must not assume a
- * particular host").
+ * guards against requests to internal or private addresses.
+ * blockPrivateNetworks is a plain boolean the caller decides, not something
+ * this module reads from env itself, so it stays simple to test.
+ * backend defaults it to true in production, the cli defaults it to false
+ * so batch runs can target a local test site.
  */
 export interface UrlValidatorOptions {
   blockPrivateNetworks: boolean;
@@ -34,13 +33,13 @@ function inRange(intIp: number, base: string, prefixLength: number): boolean {
 const PRIVATE_IPV4_RANGES: Array<[string, number]> = [
   ["0.0.0.0", 8],
   ["10.0.0.0", 8],
-  ["100.64.0.0", 10], // carrier-grade NAT
+  ["100.64.0.0", 10], // shared address space for carrier networks
   ["127.0.0.0", 8], // loopback
-  ["169.254.0.0", 16], // link-local (includes cloud metadata 169.254.169.254)
+  ["169.254.0.0", 16], // link local, also covers the cloud metadata address 169.254.169.254
   ["172.16.0.0", 12],
-  ["192.0.0.0", 24], // IETF protocol assignments
+  ["192.0.0.0", 24], // reserved for protocol assignments
   ["192.168.0.0", 16],
-  ["198.18.0.0", 15], // benchmarking
+  ["198.18.0.0", 15], // reserved for benchmarking
   ["224.0.0.0", 4], // multicast
   ["240.0.0.0", 4], // reserved
 ];
@@ -57,11 +56,11 @@ export function isPrivateOrLoopbackIPv6(ip: string): boolean {
 
   if (normalized === "::1" || normalized === "::") return true;
   if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) {
-    return true; // fe80::/10 link-local
+    return true; // link local range
   }
-  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // fc00::/7 ULA
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local range
 
-  // IPv4-mapped (::ffff:a.b.c.d) — check the embedded IPv4 address
+  // an ipv4 address mapped into ipv6 form, so check the embedded address instead
   const mappedMatch = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (mappedMatch) return isPrivateOrLoopbackIPv4(mappedMatch[1]!);
 
@@ -87,8 +86,8 @@ export async function validateUrl(
     return { ok: false, reason: "unsupported_protocol" };
   }
 
-  // URL.hostname keeps brackets for IPv6 literals ("[::1]") — strip them so
-  // isIPv6()/dns.lookup() see a bare address.
+  // the url's hostname keeps brackets for ipv6 addresses like "[::1]", so
+  // strip them before checking the address
   const hostname = parsed.hostname.toLowerCase().replace(/^\[(.+)\]$/, "$1");
 
   if (!options.blockPrivateNetworks) {

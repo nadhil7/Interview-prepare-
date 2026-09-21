@@ -1,9 +1,8 @@
 /**
- * Heuristic "same company" domain check: last two labels of the hostname
- * (e.g. "acme.com" from "www.acme.com"). Not a full public-suffix-list
- * implementation (misses cases like "acme.co.uk"), which is a known
- * limitation acceptable for this scope — documented here rather than
- * silently wrong.
+ * checks if two hosts belong to the same company by comparing the last two
+ * parts of the hostname, so "www.acme.com" and "acme.com" both become
+ * "acme.com". this is a simple guess, not a full lookup table, so it gets
+ * things like "acme.co.uk" wrong. good enough for this project's scope.
  */
 export function getRootDomain(hostname: string): string {
   const labels = hostname.toLowerCase().split(".");

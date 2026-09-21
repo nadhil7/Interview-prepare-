@@ -1,12 +1,14 @@
 import { z } from "zod";
 
 /**
- * Zod schema mirroring the AI Interview Prep Kit contract exactly (field names,
- * required-ness, enums). Additive fields (`origin`, `status`) are optional with
- * defaults so the schema stays a strict superset of the graded structure.
+ * a zod schema that mirrors the kit contract exactly, matching field
+ * names, which fields are required, and the allowed enum values. the
+ * extra fields origin and status are optional with defaults, so the
+ * schema still accepts everything the required structure needs.
  *
- * This is the single source of truth for kit shape — reused by the backend save
- * path and the CLI output writer. Do not duplicate these checks elsewhere.
+ * this is the one place that defines the kit's shape. it gets reused by
+ * the backend when saving a kit and by the cli when writing its output,
+ * so these checks should never be copied anywhere else.
  */
 
 export const requirementKindSchema = z.enum(["technical", "behavioural", "domain"]);

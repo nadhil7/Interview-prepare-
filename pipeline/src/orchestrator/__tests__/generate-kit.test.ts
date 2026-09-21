@@ -117,7 +117,7 @@ describe("generateKit", () => {
             return geminiTextResponse({ requirements: [{ text: "5+ years with React", kind: "technical", priority: "must" }] });
           }
           if (sys.includes("company brief")) {
-            // shouldn't be reached at all — zero pages skips the LLM call
+            // should not be reached at all, zero pages skips the llm call
             throw new Error("company brief should not be called with zero research pages");
           }
           if (sys.includes("interview questions for the")) {
@@ -132,7 +132,7 @@ describe("generateKit", () => {
           }
           return geminiTextResponse({});
         }
-        // every page on the "company site" 404s, including the homepage itself
+        // every page on the company site 404s, including the homepage itself
         return jsonResponse({}, false, 404);
       }),
     );
@@ -142,14 +142,14 @@ describe("generateKit", () => {
       urlValidatorOptions: { blockPrivateNetworks: false },
     });
 
-    // no throw, still a valid, complete kit
+    // no throw, still a valid and complete kit
     expect(validateKit(result.kit).ok).toBe(true);
     expect(result.researchPages).toEqual([]);
     expect(result.kit.source.pages_used).toEqual([]);
-    // the gap is recorded honestly, not papered over with invented content
+    // the gap is recorded honestly instead of being covered up with made up content
     expect(result.kit.company_brief.summary.toLowerCase()).toMatch(/did not find|unknown|limited/);
     expect(result.kit.company_brief.sources).toEqual([]);
-    // the JD-derived side of the kit is entirely unaffected by the company site being down
+    // the part of the kit based on the job description is unaffected by the company site being down
     expect(result.kit.role.requirements.length).toBeGreaterThan(0);
   });
 

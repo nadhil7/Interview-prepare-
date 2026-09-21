@@ -22,10 +22,10 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
 };
 
 /**
- * Thrown across route handlers and the background generation job. The error
- * handler middleware turns this into a structured {error:{code,message}}
- * response — never a raw stack trace — so the frontend has a stable code to
- * branch on and a message it can render directly.
+ * used across route handlers and the background generation job. the error
+ * handler middleware turns this into a plain {error: {code, message}}
+ * response, never a raw stack trace, so the frontend has a stable code to
+ * check and a message it can show directly.
  */
 export class AppError extends Error {
   code: ErrorCode;

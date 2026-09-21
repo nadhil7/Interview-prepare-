@@ -29,21 +29,21 @@ interface KitLean extends KitContract {
 }
 
 /**
- * Regenerates exactly one section. For a question category, only
- * origin:"generated"/status:"pristine" items in that category are
- * replaced — anything the user edited or pinned is left untouched — and
- * coverage is rechecked against the merged result afterward. company_brief
- * isn't itemized with origin/status (it's a single object, not a list of
- * user-editable atoms the way questions/flashcards are), so regenerating it
- * replaces the whole section.
+ * regenerates exactly one section. for a question category, only items
+ * still marked generated and pristine in that category get replaced,
+ * anything the user edited or pinned is left alone, and coverage is
+ * checked again against the merged result afterward. the company brief
+ * is not tracked item by item, it is a single object rather than a list
+ * of things a user can edit one at a time like questions or flashcards
+ * are, so regenerating it just replaces the whole thing.
  *
- * Schedule is unconditionally recomputed after every regen (not just an
- * explicit "schedule" request): a category regen can drop a pristine
- * question the old schedule pointed at (dangling question_ids) or add a
- * new one covering a must-requirement that isn't scheduled yet. Recomputing
- * keeps the kit passing validateKit's cross-field checks after any regen;
- * for a brief-only regen this reproduces the same layout, so it's a no-op
- * in that case.
+ * the schedule always gets rebuilt after any regen, not only when the
+ * schedule itself was asked for. a category regen can drop a pristine
+ * question the old schedule pointed to, leaving a dangling id, or add a
+ * new one that covers a must requirement the old schedule never
+ * scheduled. rebuilding it keeps the kit passing validation after any
+ * regen. for a brief only regen this produces the same layout again, so
+ * it does nothing harmful either way.
  */
 export async function regenerateSection(
   kitId: string,

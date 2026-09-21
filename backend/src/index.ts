@@ -10,8 +10,8 @@ async function main() {
   const env = loadEnv();
   await connectDb(env.MONGODB_URI);
 
-  // Recovers jobs orphaned by a crash/restart, then keeps sweeping so a job
-  // that hangs without the process dying still gets caught.
+  // picks up jobs left behind by a crash or restart, then keeps checking
+  // on a timer so a job that hangs without the process dying still gets caught
   const staleOnStartup = await sweepStaleJobs();
   if (staleOnStartup > 0) {
     console.warn(`recovered ${staleOnStartup} stale job(s) left over from a previous run`);

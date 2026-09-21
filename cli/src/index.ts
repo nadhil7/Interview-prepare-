@@ -1,11 +1,11 @@
 /**
- * `npm run evaluate -- --input <cases.json> --output <kits.json>`
+ * npm run evaluate -- --input cases.json --output kits.json
  *
- * Batch-evaluates a list of (jd, company_url, days) cases through the exact
- * same pipeline.generateKit function the backend's background job calls —
- * no parallel implementation of the crawl->extract->generate pipeline.
- * Continues past a failed case (records it, keeps going) rather than
- * aborting the whole run.
+ * runs a list of job description, company url and day count cases through
+ * the exact same generateKit function the backend's background job uses,
+ * so there is no second copy of the crawl, extract and generate pipeline
+ * anywhere. if one case fails it gets recorded and the run keeps going
+ * instead of stopping.
  */
 import "dotenv/config";
 import { readFile, writeFile } from "node:fs/promises";
@@ -114,9 +114,8 @@ export async function evaluate(inputPath: string, outputPath: string, concurrenc
     model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
     fetchImpl: createLimitedFetch(GEMINI_CONCURRENCY),
   };
-  // Company sites used with this command may be served from a local
-  // address (the grading harness's fixture server) — never assume
-  // production-only SSRF protection here.
+  // company sites given to this command might be served from a local
+  // address for testing, so private network protection stays off here
   const urlValidatorOptions = { blockPrivateNetworks: false };
 
   const limiter = createConcurrencyLimiter(concurrency);

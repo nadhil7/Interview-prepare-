@@ -4,11 +4,10 @@ import { buildGeminiConfig } from "../orchestration/gemini-config.js";
 afterEach(() => vi.unstubAllGlobals());
 
 /**
- * This is the fix for the gap flagged in Phase 3/4: before this, nothing
- * capped how many Gemini requests could be in flight at once — a kit's
- * 4-category fan-out fired via a bare Promise.all with zero throttling.
- * Proves the shared limiter actually bounds concurrency, not just that it
- * exists.
+ * before this fix nothing capped how many gemini requests could be in
+ * flight at once, a kit's four question categories fired all together
+ * with zero throttling. this proves the shared limiter actually bounds
+ * concurrency, not just that it exists.
  */
 describe("buildGeminiConfig — shared concurrency limiter", () => {
   it("caps concurrent fetch calls made through the returned fetchImpl", async () => {

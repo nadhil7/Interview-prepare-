@@ -22,10 +22,11 @@ export interface FindOrCreateResult {
 }
 
 /**
- * How long a job can sit in a non-terminal status before it's considered
- * abandoned — e.g. the process died mid-"researching"/"generating" and
- * nothing is ever going to finish it. Generous relative to the ~60-90s a
- * healthy run takes, so it only catches genuinely stuck jobs, not slow ones.
+ * how long a job can sit unfinished before we treat it as abandoned. for
+ * example the process died while it was researching or generating and
+ * nothing will ever finish it. this is set well above the 60 to 90
+ * seconds a normal run takes, so it only catches jobs that are truly
+ * stuck, not ones that are just slow.
  */
 export const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 const NON_TERMINAL_STATUSES = ["pending", "researching", "generating", "checking"];
@@ -36,13 +37,13 @@ function isStaleNonTerminalJob(status: string, updatedAt: Date | undefined): boo
 }
 
 /**
- * Sweeps every kit stuck in a non-terminal job status past the staleness
- * timeout and marks it "failed" with a STALE_JOB error. Run once at server
- * startup (recovers jobs orphaned by a crash/restart) and on an interval
- * (catches a job that hangs without the whole process dying). Nothing here
- * attempts to resume a partially-completed run — the pipeline isn't built
- * to pick up mid-crawl or mid-generation, so failing cleanly and letting
- * the user resubmit is the safe behavior.
+ * finds every kit stuck in an unfinished status past the timeout and
+ * marks it failed with a stale job error. this runs once when the server
+ * starts, to pick up jobs left behind by a crash or restart, and again on
+ * a timer, to catch a job that hangs without the whole process dying.
+ * nothing here tries to pick a run back up partway through, since the
+ * pipeline was not built for that. failing it cleanly and letting the
+ * user try again is the safer choice.
  */
 export async function sweepStaleJobs(timeoutMs: number = STALE_JOB_TIMEOUT_MS): Promise<number> {
   const cutoff = new Date(Date.now() - timeoutMs);
@@ -60,11 +61,12 @@ export async function sweepStaleJobs(timeoutMs: number = STALE_JOB_TIMEOUT_MS): 
 }
 
 /**
- * Duplicate-submission handling: same user + same (jd, companyUrl, days)
- * returns the existing kit instead of regenerating — unless that existing
- * kit's job is stuck (stale non-terminal status), in which case it's reset
- * to "pending" and returned as if new, so the caller restarts generation on
- * it rather than the user being permanently stuck on that exact input.
+ * handles a duplicate submission. the same user sending the same job
+ * description, company url and day count gets back the existing kit
+ * instead of a new one being generated, unless that existing kit's job is
+ * stuck, in which case it gets reset to pending and treated as new, so
+ * generation restarts on it rather than leaving the user stuck forever on
+ * that exact input.
  */
 export async function findOrCreateKitJob(userId: string, input: CreateKitInput): Promise<FindOrCreateResult> {
   const requestHash = computeRequestHash(input);
@@ -106,15 +108,15 @@ const PROGRESS_BY_STAGE: Record<"researching" | "generating" | "checking", numbe
 };
 
 /**
- * The backend's half of the job state machine: calls pipeline's shared
- * generateKit (the exact same function the CLI's batch evaluator calls —
- * no parallel implementation of the crawl->extract->generate->coverage-
- * >schedule sequence) as a background task, persisting job.status/progress
- * on every stage transition so a poll endpoint reflects real progress
- * without blocking the request/response cycle on 60-90s+ of work. Any
- * failure — SSRF-rejected URL, final structure validation failing — lands
- * the job in "failed" with a structured {code,message} instead of an
- * unhandled background rejection.
+ * the backend's half of the job flow. it calls pipeline's shared
+ * generateKit, the exact same function the cli's batch runner uses, so
+ * there is no second copy of the crawl, extract, generate, cover and
+ * schedule sequence anywhere. it runs as a background task, saving job
+ * status and progress on every stage change so a poll endpoint shows real
+ * progress without making the request wait on a minute or more of work.
+ * any failure, a blocked url or a result that fails validation, lands the
+ * job in a failed state with a plain code and message instead of an
+ * unhandled error in the background.
  */
 export async function runGenerationJob(
   kitId: string,

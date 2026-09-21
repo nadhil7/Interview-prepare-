@@ -1,4 +1,4 @@
-/** Next sequential numeric suffix for ids like "q3"/"f3", so freshly generated items during a regeneration never collide with existing ones. */
+/** finds the next number to use for ids like q3 or f3, so new items from a regeneration never collide with the existing ones. */
 export function nextIndexFor(ids: string[], prefix: string): number {
   const numbers = ids
     .filter((id) => id.startsWith(prefix))

@@ -15,7 +15,7 @@ const createKitSchema = z.object({
   days: z.number().int().min(1).max(60),
 });
 
-/** Express 4 doesn't forward async rejections to the error middleware on its own. */
+/** express 4 does not send async errors to the error middleware on its own, so this does it instead. */
 function asyncHandler(fn: (req: AuthedRequest, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req as AuthedRequest, res, next).catch(next);

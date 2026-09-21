@@ -75,12 +75,12 @@ const BEHAVIOURAL_WORDING = [/communicat/i, /leadership/i, /team\s?work/i, /coll
 const DOMAIN_WORDING = [/industry/i, /domain knowledge/i, /regulatory/i, /compliance/i, /healthcare/i, /fintech/i];
 
 /**
- * Deterministic fallback used when Gemini is unavailable after retries (or
- * no API key is configured): splits the JD into lines and reuses that text
- * verbatim rather than inventing anything. A thin JD produces a thin,
- * honestly-labeled requirement set — priority defaults to "must" absent
- * explicit "nice to have"-style wording, matching how plain JD bullets are
- * conventionally read.
+ * plain fallback used when gemini is unavailable after retries, or no api
+ * key is set at all. splits the job description into lines and reuses that
+ * text as is instead of making anything up. a thin job description ends up
+ * with a thin, honest requirement list. priority defaults to must unless
+ * the line has clear nice to have wording, matching how plain bullet
+ * points are usually read.
  */
 export function heuristicExtractRequirements(jobDescription: string): Array<Omit<Requirement, "id">> {
   const lines = jobDescription

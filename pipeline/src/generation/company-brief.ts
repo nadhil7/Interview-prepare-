@@ -31,9 +31,10 @@ Respond only with JSON matching the schema.`;
 const MAX_CHARS_PER_PAGE = 6000;
 
 /**
- * Grounds the brief only in retrieved page text. With zero pages, skips the
- * LLM call entirely and returns an honest thin brief — there is nothing to
- * ground a summary in, so generating one would necessarily fabricate.
+ * bases the brief only on the retrieved page text. with zero pages, it
+ * skips the llm call entirely and returns an honest, thin brief, since
+ * there is nothing to base a summary on and generating one anyway would
+ * just be guessing.
  */
 export async function generateCompanyBrief(
   companyName: string,
@@ -65,7 +66,7 @@ export async function generateCompanyBrief(
   }
 }
 
-/** Deterministic fallback: reuses the first retrieved page's own text rather than inventing prose. */
+/** plain fallback, reuses the first retrieved page's own text instead of writing new prose. */
 export function heuristicCompanyBrief(companyName: string, pages: RetrievedPage[]): CompanyBriefResult {
   const sources = pages.map((p) => p.url);
   const firstPageText = pages[0]?.text.slice(0, 500).trim() ?? "";

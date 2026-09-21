@@ -74,7 +74,7 @@ describe("runCoverageLoop", () => {
       geminiConfig: { apiKey: "key", fetchImpl, maxRetries: 0 },
     });
 
-    // one gap-fill pass on top of the (empty) initial pass = MAX_COVERAGE_PASSES
+    // one extra pass to fill gaps on top of the empty first pass reaches the pass limit
     expect(result.passes).toBe(MAX_COVERAGE_PASSES);
     expect(result.uncoveredRequirementIds).toEqual([]);
     expect(result.questions).toHaveLength(2);

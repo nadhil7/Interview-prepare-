@@ -8,11 +8,11 @@ import type { Question, Requirement } from "../schema/kit.js";
 import { findUncoveredRequirementIds } from "./coverage-checker.js";
 
 /**
- * Capped at 2 total passes (1 initial + 1 gap-fill): in practice a single
- * gap-fill pass recovers nearly all coverage misses, and each additional
- * pass costs a full round of Gemini calls against the free-tier rate/token
- * budget for diminishing returns. `coverage.passes` in the output kit
- * records how many actually ran.
+ * capped at 2 total passes, one initial pass plus one pass to fill gaps.
+ * in practice a single extra pass fixes nearly every coverage miss, and
+ * each extra pass after that costs a full round of gemini calls against
+ * the free tier budget for very little gain. coverage.passes in the
+ * finished kit records how many actually ran.
  */
 export const MAX_COVERAGE_PASSES = 2;
 
@@ -48,11 +48,12 @@ export interface CoverageLoopResult {
 }
 
 /**
- * Runs the coverage checker; if requirements are left uncovered after the
- * first generation pass, re-runs question generation scoped to just those
- * requirements (grouped by category — still one call per category, never
- * everything at once), merges the new questions in, and rechecks. Stops
- * early once nothing is uncovered, or after MAX_COVERAGE_PASSES.
+ * runs the coverage checker. if requirements are still uncovered after
+ * the first generation pass, it runs question generation again but only
+ * for those requirements, grouped by category so it is still one call per
+ * category and never everything at once, merges the new questions in, and
+ * checks again. stops as soon as nothing is uncovered, or once the pass
+ * limit is reached.
  */
 export async function runCoverageLoop(options: RunCoverageLoopOptions): Promise<CoverageLoopResult> {
   let questions = options.initialQuestions;

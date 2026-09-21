@@ -56,7 +56,7 @@ describe("allocateSchedule", () => {
       question("medium-must", ["r1"], 2),
     ];
     const result = allocateSchedule(questions, requirements, 3);
-    // 3 questions over 3 days -> 1 per day; day 1 should get the highest-scored (hard-must)
+    // 3 questions over 3 days means 1 per day, day 1 should get the one that scored highest
     expect(result.days[0]!.question_ids).toEqual(["hard-must"]);
     expect(result.days[2]!.question_ids).toEqual(["easy-nice"]);
   });

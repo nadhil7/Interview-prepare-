@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { isPrivateOrLoopbackIPv4, isPrivateOrLoopbackIPv6, validateUrl } from "../url-validator.js";
 
 /**
- * Every SSRF-relevant case below uses an IP literal (or the "localhost"
- * hostname) as the URL host. Node's dns.lookup() resolves an IP literal
- * immediately without a real network/DNS round trip, so these tests are
- * deterministic and safe to run offline / in CI.
+ * every case below that matters for security uses an ip address, or the
+ * word localhost, as the url host. node's dns lookup resolves an ip
+ * address right away without a real network round trip, so these tests
+ * always give the same result and are safe to run offline.
  */
 describe("validateUrl — SSRF protection", () => {
   it("allows any host when blockPrivateNetworks is false (dev/CLI-against-local-fixtures mode)", async () => {

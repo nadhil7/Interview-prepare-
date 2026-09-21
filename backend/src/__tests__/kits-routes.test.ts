@@ -7,8 +7,9 @@ import { clearTestDb, startTestDb, stopTestDb } from "./mongo-test-utils.js";
 const app = createApp({
   jwtSecret: "test-secret",
   geminiConfig: { apiKey: undefined },
-  // blocks the loopback URL used below, so a fire-and-forget background job
-  // fails fast on the SSRF check instead of attempting real network calls
+  // blocks the loopback url used below, so a background job that is not
+  // awaited fails fast on the private network check instead of trying a
+  // real network call
   urlValidatorOptions: { blockPrivateNetworks: true },
 });
 
